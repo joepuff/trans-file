@@ -2,69 +2,72 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>p2p文件中转(V19)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>p2p中转(V21 ARQ-Fix)</title>
+    
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
-        :root { --primary: #000000; --bg: #f5f5f7; --accent: #0066cc; }
-        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px; background: var(--bg); color: #1d1d1f; }
+        :root { --primary: #ff3b30; --bg: #f2f2f7; --card-bg: #fff; --text: #1c1c1e; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 16px; background: var(--bg); color: var(--text); }
         
-        .card { background: white; padding: 25px; border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 20px; }
-        .tag { font-size: 0.7em; background: #e5f1ff; color: var(--accent); padding: 3px 8px; border-radius: 12px; font-weight: 600; vertical-align: middle; margin-left: 8px;}
+        .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 20px; }
+        .tag { font-size: 0.7rem; background: #ffe4e4; color: #d60000; padding: 3px 8px; border-radius: 6px; font-weight: 700; margin-left: 5px; }
         
-        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        input[type="text"] { flex: 1; padding: 14px; border: 1px solid #d2d2d7; border-radius: 12px; font-family: monospace; font-size: 1.1em; outline: none; transition: 0.2s; }
-        input:focus { border-color: var(--accent); }
+        /* UI 继承自 V20 的完美布局 */
+        .input-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex: 1 1 100%; min-width: 200px; padding: 12px; border: 1px solid #e5e5ea; border-radius: 10px; font-family: monospace; outline: none; }
+        .btn-row { display: flex; gap: 8px; flex: 1 1 auto; }
+        button { height: 44px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;}
+        .btn-icon { background: #e9e9eb; flex: 1; }
+        .btn-main { background: var(--primary); color: white; flex: 2; }
         
-        button { padding: 0 16px; height: 48px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 1em; }
-        button:active { transform: scale(0.96); opacity: 0.8; }
-        .btn-icon { background: #e5e5ea; color: #1d1d1f; }
-        .btn-main { background: var(--accent); color: white; min-width: 80px; }
+        @media (min-width: 480px) { input[type="text"] { flex: 2; } .btn-row { flex: 3; } }
+
+        #status { font-size: 0.9rem; color: #636366; text-align: center; margin-bottom: 20px; padding: 10px; background: #f2f2f7; border-radius: 10px; }
         
-        #status { font-size: 0.9em; color: #86868b; text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: #f5f5f7;}
-        
-        .file-box { border: 2px dashed #d2d2d7; padding: 40px 20px; text-align: center; border-radius: 16px; cursor: pointer; transition: 0.2s; background: white; }
-        .file-box:active { background: #f5f5f7; border-color: var(--accent); }
+        .file-box { border: 2px dashed #c7c7cc; padding: 40px 20px; text-align: center; border-radius: 12px; cursor: pointer; background: #fff; }
         
         .progress-wrap { margin-top: 20px; display: none; }
-        .progress-bar { height: 6px; background: #e5e5ea; border-radius: 3px; overflow: hidden; }
-        .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.1s linear; }
-        .progress-info { display: flex; justify-content: space-between; font-size: 0.8em; color: #86868b; margin-top: 6px; }
+        .progress-bar { height: 8px; background: #e5e5ea; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.1s linear; }
+        .progress-info { display: flex; justify-content: space-between; font-size: 0.8rem; color: #8e8e93; margin-top: 6px; }
 
-        .log-item { padding: 15px 0; border-bottom: 1px solid #e5e5ea; display: flex; flex-direction: column; gap: 8px; }
-        .log-top { display: flex; justify-content: space-between; align-items: center; font-size: 0.95em; }
-        .media-preview { width: 100%; border-radius: 12px; background: black; margin-top: 8px; max-height: 300px; object-fit: contain; }
-        .btn-dl { font-size: 0.85em; color: var(--accent); text-decoration: none; font-weight: 600; padding: 6px 12px; background: #e5f1ff; border-radius: 16px; }
+        .log-item { padding: 15px 0; border-bottom: 1px solid #e5e5ea; }
+        .media-preview { width: 100%; max-height: 300px; border-radius: 8px; background: #000; margin-top: 10px; object-fit: contain; }
+        .btn-dl { font-size: 0.85rem; color: var(--primary); text-decoration: none; padding: 6px 12px; background: #fff0f5; border-radius: 8px; display: inline-block; margin-top: 8px; font-weight: bold;}
 
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter: blur(5px); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
-        #qrcode-gen { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
-        #reader { width: 100%; max-width: 400px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-        .close-btn { margin-top: 20px; background: white; color: black; padding: 10px 30px; border-radius: 20px; }
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter: blur(5px); justify-content:center; align-items:center; z-index:999; flex-direction: column; }
+        #qrcode-gen { background: white; padding: 20px; border-radius: 20px; }
+        #reader { width: 100%; max-width: 400px; border-radius: 16px; overflow: hidden; }
+        .close-btn { margin-top: 20px; background: white; padding: 10px 30px; border-radius: 30px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h3 style="margin-top:0;">V19 严格排序版 <span class="tag">Strict-Order</span></h3>
-        <div style="font-size:0.85em; color:#86868b; margin-bottom:15px">修复合并错乱 • 视频完美播放 • 100%完整性</div>
+        <h3>V21 自动重传版 <span class="tag">ARQ</span></h3>
+        <div style="font-size:0.85rem; color:#8e8e93; margin-bottom:15px">丢包自动修复 • 弱网环境增强</div>
         
         <div class="input-group">
-            <input type="text" id="credentialInput" placeholder="32位凭证" maxlength="32">
-            <button class="btn-icon" onclick="genKey()" title="随机">🎲</button>
-            <button class="btn-icon" onclick="showQR()" title="码">📱</button>
-            <button class="btn-icon" onclick="scanQR()" title="扫">📷</button>
-            <button class="btn-main" onclick="initApp()">连接</button>
+            <input type="text" id="credentialInput" placeholder="输入32位凭证" maxlength="32">
+            <div class="btn-row">
+                <button class="btn-icon" onclick="genKey()">🎲</button>
+                <button class="btn-icon" onclick="showQR()">📱</button>
+                <button class="btn-icon" onclick="scanQR()">📷</button>
+                <button class="btn-main" onclick="initApp()">连接</button>
+            </div>
         </div>
         
-        <div id="status">等待连接...</div>
+        <div id="status">等待操作...</div>
 
         <div id="panel" style="display:none;">
             <div class="file-box" onclick="document.getElementById('fileInput').click()">
-                <div style="font-size:2em; margin-bottom:10px">📂</div>
-                <div style="font-weight:600">点击选择文件</div>
-                <div style="font-size:0.8em; color:#86868b; margin-top:5px">支持视频/文档 (Max 1GB)</div>
+                <div style="font-size:2.5rem; margin-bottom:10px">📤</div>
+                <div style="font-weight:600">点击发送文件</div>
+                <div style="font-size:0.85rem; color:#8e8e93; margin-top:5px">支持 500MB+ 断点补传</div>
                 <input type="file" id="fileInput" style="display:none">
             </div>
             
@@ -79,8 +82,8 @@
     </div>
 
     <div class="card">
-        <h4 style="margin:0 0 15px 0; color:#86868b">传输记录</h4>
-        <div id="history"><div style="text-align:center; color:#d2d2d7; font-size:0.9em;">暂无记录</div></div>
+        <h4 style="margin:0 0 10px 0; color:#8e8e93; font-size:0.9rem;">传输记录</h4>
+        <div id="history"><div style="text-align:center; color:#c7c7cc; font-size:0.9rem; padding:10px">暂无记录</div></div>
     </div>
 
     <div id="qr-modal" class="modal" onclick="this.style.display='none'"><div id="qrcode-gen"></div></div>
@@ -91,10 +94,9 @@
         const CONFIG = {
             pbkdf2: { name: "PBKDF2", hash: "SHA-256", iterations: 500000 },
             aes: { name: "AES-GCM", length: 256 },
-            salt_room: "V19_ORDER_ROOM", salt_key: "V19_ORDER_KEY"
+            salt_room: "V21_ARQ_ROOM", salt_key: "V21_ARQ_KEY"
         };
 
-        // --- 加密核心 ---
         const SecurityCore = {
             encKey: null,
             async init(password) {
@@ -107,10 +109,9 @@
             async encrypt(chunk) {
                 const iv = crypto.getRandomValues(new Uint8Array(12));
                 const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.encKey, chunk);
-                // 打包 IV + Cipher
                 const packed = new Uint8Array(12 + cipher.byteLength);
                 packed.set(iv, 0); packed.set(new Uint8Array(cipher), 12);
-                return packed; // 返回 ArrayBuffer
+                return packed;
             },
             async decrypt(packed) {
                 const iv = packed.slice(0, 12);
@@ -119,20 +120,17 @@
             }
         };
 
-        // --- 全局状态 ---
         let peer, conn;
-        let incoming = { 
-            chunks: [], // 使用稀疏数组存储，按 index 插入
-            meta: null, 
-            receivedCount: 0, 
-            totalChunks: 0 
-        };
+        // 接收状态
+        let incoming = { chunks: [], meta: null, receivedCount: 0, totalChunks: 0 };
+        // 发送状态 (用于重传时读取文件)
+        let sendingFile = null; 
         let isBusy = false;
 
         async function initApp() {
             const code = document.getElementById('credentialInput').value.trim();
             if(code.length !== 32) return alert("凭证需32位");
-            setStatus("🔐 正在加密连接...");
+            setStatus("🔐 加密握手中...");
             setTimeout(async () => {
                 try {
                     const roomId = await SecurityCore.init(code);
@@ -146,12 +144,10 @@
             peer = new Peer(roomId, {
                 host: '0.peerjs.com', port: 443, secure: true, path: '/',
                 config: { iceServers: [
-                    { urls: 'stun:stun.miwifi.com' },
-                    { urls: 'stun:stun.chat.bilibili.com' },
-                    { urls: 'stun:stun.qq.com' }
+                    { urls: 'stun:stun.miwifi.com' }, { urls: 'stun:stun.chat.bilibili.com' }, { urls: 'stun:stun.qq.com' }
                 ]}
             });
-            peer.on('open', () => { setStatus("✅ 节点就绪 (CN-STUN)"); peer.on('connection', setupConn); });
+            peer.on('open', () => { setStatus("✅ 节点就绪 (ARQ)"); peer.on('connection', setupConn); });
             peer.on('error', e => {
                 if(e.type === 'unavailable-id') {
                     setStatus("🔗 连接房主...");
@@ -168,122 +164,130 @@
             conn.on('close', () => setStatus("🔌 断开"));
         }
 
-        // --- 发送逻辑：增加 seq 序号 ---
+        // --- 发送逻辑 ---
         document.getElementById('fileInput').addEventListener('change', async e => {
             const file = e.target.files[0];
             if(!file || !conn) return;
             if(isBusy) return alert("忙碌中");
+            
             isBusy = true;
+            sendingFile = file; // 保存引用以便重传
             document.getElementById('prog-box').style.display = 'block';
             
-            // 计算总片数
             const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type, total: totalChunks });
             
-            // 发送元数据
-            conn.send({ 
-                type: 'meta', 
-                name: file.name, 
-                size: file.size, 
-                mime: file.type || 'application/octet-stream',
-                total: totalChunks // 告知对方总片数
-            });
-            
-            let offset = 0;
-            let seq = 0; // 当前页码
-            const reader = new FileReader();
-
-            const readNext = () => {
-                const slice = file.slice(offset, offset + CHUNK_SIZE);
-                reader.readAsArrayBuffer(slice);
-            };
-
-            reader.onload = async (evt) => {
-                if(!conn || !conn.open) return;
-                const encrypted = await SecurityCore.encrypt(evt.target.result);
-                
-                // 🔥 核心修改：发送时带上 seq 序号
-                conn.send({
-                    type: 'chunk',
-                    seq: seq,
-                    payload: encrypted
-                });
-
-                offset += CHUNK_SIZE;
-                seq++;
-                
-                const percent = Math.min(100, Math.round((offset / file.size) * 100));
-                updateBar(percent, offset, file.size, "发送中");
-
-                if (offset < file.size) {
-                    setTimeout(readNext, 0); 
-                } else {
-                    conn.send({ type: 'end' }); // 结束信号
-                    isBusy = false;
-                    addHistory(file.name, "⬆ 发送", formatSize(file.size), null, file.type);
-                    setStatus("✅ 发送完毕");
-                }
-            };
-            readNext();
+            // 首次全量发送
+            sendChunksRange(0, totalChunks - 1, totalChunks);
         });
 
-        // --- 接收逻辑：严格按 seq 归位 ---
+        // 通用发送函数 (支持全量发送 和 补发特定列表)
+        async function sendChunksRange(start, end, total, specificList = null) {
+            const file = sendingFile;
+            let list = specificList;
+            
+            // 如果没有指定列表，就生成从 start 到 end 的序列
+            if(!list) {
+                list = [];
+                for(let i=start; i<=end; i++) list.push(i);
+            }
+
+            const reader = new FileReader();
+            let idx = 0;
+
+            const sendNext = async () => {
+                if(idx >= list.length) {
+                    // 本轮发送结束
+                    if(!specificList) {
+                        conn.send({ type: 'end' }); // 首次发送完毕，发信号
+                        setStatus("⏳ 等待接收方确认...");
+                    } else {
+                        conn.send({ type: 'retry-end' }); // 补发完毕
+                        setStatus("🔄 补发完成，等待校验...");
+                    }
+                    return;
+                }
+
+                const seq = list[idx];
+                const offset = seq * CHUNK_SIZE;
+                const slice = file.slice(offset, offset + CHUNK_SIZE);
+                
+                reader.onload = async (evt) => {
+                    if(!conn || !conn.open) return;
+                    const encrypted = await SecurityCore.encrypt(evt.target.result);
+                    conn.send({ type: 'chunk', seq: seq, payload: encrypted });
+                    
+                    idx++;
+                    // 仅在首次发送时更新大进度条
+                    if(!specificList) {
+                        const percent = Math.min(100, Math.round((seq / total) * 100));
+                        updateBar(percent, seq * CHUNK_SIZE, file.size, "发送中");
+                    }
+                    setTimeout(sendNext, 0); // 避免卡顿
+                };
+                reader.readAsArrayBuffer(slice);
+            };
+            sendNext();
+        }
+
+        // --- 接收与ARQ逻辑 ---
         async function handleData(data) {
             // 1. 元数据
             if (data.type === 'meta') {
-                incoming = { 
-                    chunks: new Array(data.total), // 预分配数组
-                    meta: data, 
-                    receivedCount: 0,
-                    receivedBytes: 0,
-                    totalChunks: data.total
-                };
+                incoming = { chunks: new Array(data.total), meta: data, receivedCount: 0, receivedBytes: 0, totalChunks: data.total };
                 isBusy = true;
                 document.getElementById('prog-box').style.display = 'block';
                 setStatus(`⬇ 接收: ${data.name}`);
                 return;
             }
 
-            // 2. 数据分片 (带序号)
+            // 2. 数据分片
             if (data.type === 'chunk' && isBusy) {
                 try {
-                    const decrypted = await SecurityCore.decrypt(data.payload);
-                    
-                    // 🔥 核心修改：按序号存入对应位置，防止乱序
-                    incoming.chunks[data.seq] = decrypted;
-                    incoming.receivedCount++;
-                    incoming.receivedBytes += decrypted.byteLength;
-
-                    const percent = Math.min(100, Math.round((incoming.receivedCount / incoming.totalChunks) * 100));
-                    updateBar(percent, incoming.receivedBytes, incoming.meta.size, "接收中");
-
-                } catch(e) {
-                    console.error("Chunk error:", e);
-                    // 即使解密失败也不要中断整个流程，但这块数据会丢失
-                }
+                    // 如果该分片还没收过 (避免重复解密)
+                    if(!incoming.chunks[data.seq]) {
+                        const decrypted = await SecurityCore.decrypt(data.payload);
+                        incoming.chunks[data.seq] = decrypted;
+                        incoming.receivedCount++;
+                        incoming.receivedBytes += decrypted.byteLength;
+                        
+                        const percent = Math.min(100, Math.round((incoming.receivedCount / incoming.totalChunks) * 100));
+                        updateBar(percent, incoming.receivedBytes, incoming.meta.size, "接收中");
+                    }
+                } catch(e) {}
                 return;
             }
 
-            // 3. 结束信号
-            if (data.type === 'end') {
+            // 3. 结束信号 (首次或补发)
+            if ((data.type === 'end' || data.type === 'retry-end') && isBusy) {
+                checkIntegrityAndRetry();
+                return;
+            }
+
+            // 4. 发送方收到重传请求
+            if (data.type === 'retry-req') {
+                setStatus(`⚠️ 对方请求补发 ${data.list.length} 个分片...`);
+                sendChunksRange(0, 0, 0, data.list); // 调用补发逻辑
+            }
+        }
+
+        // 核心：完整性检查与重传请求
+        function checkIntegrityAndRetry() {
+            let missingList = [];
+            for(let i=0; i<incoming.totalChunks; i++) {
+                if(!incoming.chunks[i]) missingList.push(i);
+            }
+
+            if(missingList.length > 0) {
+                setStatus(`⚠️ 发现 ${missingList.length} 个丢包，请求补发...`);
+                // 发送重传请求
+                conn.send({ type: 'retry-req', list: missingList });
+            } else {
                 finishReceive();
             }
         }
 
         function finishReceive() {
-            // 完整性检查：检查是否有空洞
-            let missing = 0;
-            for(let i=0; i<incoming.totalChunks; i++) {
-                if(!incoming.chunks[i]) missing++;
-            }
-
-            if(missing > 0) {
-                alert(`警告：文件损坏！丢失了 ${missing} 个分片。网络环境可能极其恶劣。`);
-                setStatus("❌ 接收失败 (丢包)");
-                isBusy = false;
-                return;
-            }
-
-            // 合并 Blob
             let mime = incoming.meta.mime;
             if(!mime || mime==='application/octet-stream') {
                 if(incoming.meta.name.match(/\.mp4$/i)) mime = 'video/mp4';
@@ -292,13 +296,11 @@
 
             const blob = new Blob(incoming.chunks, { type: mime });
             const url = URL.createObjectURL(blob);
-            
             addHistory(incoming.meta.name, "⬇ 收到", formatSize(incoming.meta.size), url, mime);
             
             isBusy = false;
-            // 释放内存
-            incoming.chunks = []; 
-            setStatus("✅ 接收完成 (完整性校验通过)");
+            incoming.chunks = []; // 释放内存
+            setStatus("✅ 接收完成 (100% 完整)");
         }
 
         // --- UI 工具 ---
@@ -318,17 +320,12 @@
                 else if (mime && mime.startsWith('image/')) preview = `<img src="${url}" class="media-preview">`;
             }
 
-            const isSend = type.includes('发送');
+            const color = type.includes('发送') ? '#007aff' : '#34c759';
             const html = `
                 <div class="log-item">
-                    <div class="log-top">
-                        <div style="font-weight:600; color:${isSend?'#0066cc':'#34c759'}">${type}</div>
-                        <div style="font-size:0.9em; color:#86868b">${size}</div>
-                    </div>
-                    <div style="word-break:break-all; font-family:monospace;">${name}</div>
-                    ${url ? `<div style="margin-top:5px; display:flex; gap:10px; align-items:center;">
-                        <a href="${url}" download="${name}" class="btn-dl">保存到本地</a>
-                    </div>` : ''}
+                    <div style="font-weight:600; color:${color}; margin-bottom:4px;">${type} <span style="font-weight:normal;color:#8e8e93;font-size:0.8em">(${size})</span></div>
+                    <div style="word-break:break-all; font-family:monospace; font-size:0.9em; color:#333">${name}</div>
+                    ${url ? `<a href="${url}" download="${name}" class="btn-dl">💾 保存到本地</a>` : ''}
                     ${preview}
                 </div>`;
             div.innerHTML = html + div.innerHTML;
@@ -341,20 +338,14 @@
         function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
         function setStatus(s) { document.getElementById('status').innerText = s; }
 
-        // QR 相关
         let html5QrCode;
-        window.onload = () => {
-            if(location.hash.includes('c=')) {
-                document.getElementById('credentialInput').value = location.hash.split('c=')[1];
-                setTimeout(initApp, 500); history.replaceState(null, null, ' ');
-            }
-        };
+        window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value = location.hash.split('c=')[1]; setTimeout(initApp, 500); history.replaceState(null, null, ' '); } };
         function showQR() {
             const c = document.getElementById('credentialInput').value;
             if(c.length!=32) return alert("需32位凭证");
             document.getElementById('qr-modal').style.display = 'flex';
             document.getElementById('qrcode-gen').innerHTML = '';
-            new QRCode(document.getElementById('qrcode-gen'), { text: location.href.split('#')[0]+'#c='+c, width: 200, height: 200 });
+            new QRCode(document.getElementById('qrcode-gen'), { text: location.href.split('#')[0]+'#c='+c, width: 220, height: 220 });
         }
         function scanQR() {
             document.getElementById('scan-modal').style.display = 'flex';
