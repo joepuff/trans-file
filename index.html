@@ -3,113 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>p2p文件中转(V18 VideoFix)</title>
-    
+    <title>p2p文件中转(V19)</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
-        :root { --primary: #e91e63; --bg: #fdf2f8; } /* 换个粉色系区分版本 */
-        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px; background: var(--bg); color: #333; }
+        :root { --primary: #000000; --bg: #f5f5f7; --accent: #0066cc; }
+        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px; background: var(--bg); color: #1d1d1f; }
         
-        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .tag { font-size: 0.75em; background: #fce7f3; color: #be185d; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px; }
+        .card { background: white; padding: 25px; border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .tag { font-size: 0.7em; background: #e5f1ff; color: var(--accent); padding: 3px 8px; border-radius: 12px; font-weight: 600; vertical-align: middle; margin-left: 8px;}
         
-        .input-group { display: flex; gap: 8px; margin-bottom: 15px; }
-        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-family: monospace; min-width: 0; }
-        button { padding: 0 14px; height: 44px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-rand { background: #0ea5e9; }
-        .btn-qr { background: #64748b; }
-        .btn-scan { background: #8b5cf6; }
-        .btn-conn { background: var(--primary); width: 80px;}
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex: 1; padding: 14px; border: 1px solid #d2d2d7; border-radius: 12px; font-family: monospace; font-size: 1.1em; outline: none; transition: 0.2s; }
+        input:focus { border-color: var(--accent); }
         
-        #status { font-size: 0.9em; color: #666; margin-bottom: 15px; padding: 10px; background: #fff1f2; border-radius: 6px; text-align: center; border: 1px dashed #fecdd3; }
+        button { padding: 0 16px; height: 48px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 1em; }
+        button:active { transform: scale(0.96); opacity: 0.8; }
+        .btn-icon { background: #e5e5ea; color: #1d1d1f; }
+        .btn-main { background: var(--accent); color: white; min-width: 80px; }
         
-        .file-select { border: 2px dashed var(--primary); padding: 30px; text-align: center; border-radius: 12px; background: #fff; cursor: pointer; }
+        #status { font-size: 0.9em; color: #86868b; text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 8px; background: #f5f5f7;}
         
-        .progress-container { margin-top: 15px; display: none; }
-        .progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.1s linear; }
-        .progress-text { font-size: 0.8em; text-align: center; margin-top: 5px; color: #666; }
+        .file-box { border: 2px dashed #d2d2d7; padding: 40px 20px; text-align: center; border-radius: 16px; cursor: pointer; transition: 0.2s; background: white; }
+        .file-box:active { background: #f5f5f7; border-color: var(--accent); }
+        
+        .progress-wrap { margin-top: 20px; display: none; }
+        .progress-bar { height: 6px; background: #e5e5ea; border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.1s linear; }
+        .progress-info { display: flex; justify-content: space-between; font-size: 0.8em; color: #86868b; margin-top: 6px; }
 
-        .history-item { padding: 15px 0; border-bottom: 1px solid #eee; font-size: 0.9em; }
-        .history-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .btn-save { padding: 6px 12px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; font-size: 0.9em; display: inline-block;}
-        
-        /* V18 新增：视频播放器样式 */
-        .media-preview { width: 100%; margin-top: 10px; border-radius: 8px; background: black; max-height: 400px; }
-        
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
-        #qrcode-gen { background: white; padding: 20px; border-radius: 16px; }
-        #reader { width: 100%; max-width: 500px; border-radius: 8px; overflow: hidden; }
-        .close-btn { margin-top: 20px; background: transparent; border: 1px solid white; color: white; }
+        .log-item { padding: 15px 0; border-bottom: 1px solid #e5e5ea; display: flex; flex-direction: column; gap: 8px; }
+        .log-top { display: flex; justify-content: space-between; align-items: center; font-size: 0.95em; }
+        .media-preview { width: 100%; border-radius: 12px; background: black; margin-top: 8px; max-height: 300px; object-fit: contain; }
+        .btn-dl { font-size: 0.85em; color: var(--accent); text-decoration: none; font-weight: 600; padding: 6px 12px; background: #e5f1ff; border-radius: 16px; }
+
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter: blur(5px); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
+        #qrcode-gen { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        #reader { width: 100%; max-width: 400px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+        .close-btn { margin-top: 20px; background: white; color: black; padding: 10px 30px; border-radius: 20px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h3 style="margin-top:0; display:flex; align-items:center;">
-            🎬 V18 视频修复版
-            <span class="tag">Player-Inside</span>
-        </h3>
+        <h3 style="margin-top:0;">V19 严格排序版 <span class="tag">Strict-Order</span></h3>
+        <div style="font-size:0.85em; color:#86868b; margin-bottom:15px">修复合并错乱 • 视频完美播放 • 100%完整性</div>
         
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="32位凭证" maxlength="32">
-            <button class="btn-rand" onclick="generateCredential()">🎲</button>
-            <button class="btn-qr" onclick="showGenQR()">📱</button>
-            <button class="btn-scan" onclick="startCameraScan()">📷</button>
-            <button class="btn-conn" onclick="initApp()">🚀</button>
+            <button class="btn-icon" onclick="genKey()" title="随机">🎲</button>
+            <button class="btn-icon" onclick="showQR()" title="码">📱</button>
+            <button class="btn-icon" onclick="scanQR()" title="扫">📷</button>
+            <button class="btn-main" onclick="initApp()">连接</button>
         </div>
         
-        <div id="status">🔒 等待连接...</div>
+        <div id="status">等待连接...</div>
 
         <div id="panel" style="display:none;">
-            <div class="file-select" onclick="document.getElementById('fileInput').click()">
-                <div style="font-size:2.5em; margin-bottom:5px">📤</div>
-                <div>点击选择文件/视频</div>
-                <div style="font-size:0.8em; color:#e91e63; margin-top:5px">支持视频在线播放</div>
+            <div class="file-box" onclick="document.getElementById('fileInput').click()">
+                <div style="font-size:2em; margin-bottom:10px">📂</div>
+                <div style="font-weight:600">点击选择文件</div>
+                <div style="font-size:0.8em; color:#86868b; margin-top:5px">支持视频/文档 (Max 1GB)</div>
                 <input type="file" id="fileInput" style="display:none">
             </div>
-            <div class="progress-container" id="progress-box">
+            
+            <div class="progress-wrap" id="prog-box">
                 <div class="progress-bar"><div class="progress-fill" id="p-fill"></div></div>
-                <div class="progress-text" id="p-text">0%</div>
+                <div class="progress-info">
+                    <span id="p-txt">0%</span>
+                    <span id="p-detail">0/0 MB</span>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h4 style="margin:0 0 10px 0">传输记录</h4>
-        <div id="history">
-            <div style="text-align:center; color:#999; font-size:0.8em; padding:10px">暂无记录</div>
-        </div>
+        <h4 style="margin:0 0 15px 0; color:#86868b">传输记录</h4>
+        <div id="history"><div style="text-align:center; color:#d2d2d7; font-size:0.9em;">暂无记录</div></div>
     </div>
 
-    <div id="gen-modal" class="modal" onclick="this.style.display='none'"><div id="qrcode-gen"></div></div>
-    <div id="scan-modal" class="modal"><div id="reader"></div><button class="close-btn" onclick="stopCameraScan()">关闭摄像头</button></div>
+    <div id="qr-modal" class="modal" onclick="this.style.display='none'"><div id="qrcode-gen"></div></div>
+    <div id="scan-modal" class="modal"><div id="reader"></div><button class="close-btn" onclick="stopScan()">关闭摄像头</button></div>
 
     <script>
         const CHUNK_SIZE = 64 * 1024; 
         const CONFIG = {
             pbkdf2: { name: "PBKDF2", hash: "SHA-256", iterations: 500000 },
             aes: { name: "AES-GCM", length: 256 },
-            salt_room: "V18_VIDEO_ROOM_SALT", salt_key: "V18_VIDEO_KEY_SALT"
+            salt_room: "V19_ORDER_ROOM", salt_key: "V19_ORDER_KEY"
         };
 
+        // --- 加密核心 ---
         const SecurityCore = {
             encKey: null,
             async init(password) {
                 const enc = new TextEncoder();
                 const baseKey = await crypto.subtle.importKey("raw", enc.encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
                 this.encKey = await crypto.subtle.deriveKey({ ...CONFIG.pbkdf2, salt: enc.encode(CONFIG.salt_key) }, baseKey, CONFIG.aes, false, ["encrypt", "decrypt"]);
-                const roomData = await crypto.subtle.digest('SHA-256', enc.encode(password + CONFIG.salt_room));
-                return Array.from(new Uint8Array(roomData)).map(b=>b.toString(16).padStart(2,'0')).join('').substr(0,32);
+                const hash = await crypto.subtle.digest('SHA-256', enc.encode(password + CONFIG.salt_room));
+                return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').substr(0,32);
             },
             async encrypt(chunk) {
                 const iv = crypto.getRandomValues(new Uint8Array(12));
                 const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.encKey, chunk);
+                // 打包 IV + Cipher
                 const packed = new Uint8Array(12 + cipher.byteLength);
                 packed.set(iv, 0); packed.set(new Uint8Array(cipher), 12);
-                return packed;
+                return packed; // 返回 ArrayBuffer
             },
             async decrypt(packed) {
                 const iv = packed.slice(0, 12);
@@ -118,14 +119,20 @@
             }
         };
 
+        // --- 全局状态 ---
         let peer, conn;
-        let incoming = { chunks: [], meta: null, recvSize: 0 };
+        let incoming = { 
+            chunks: [], // 使用稀疏数组存储，按 index 插入
+            meta: null, 
+            receivedCount: 0, 
+            totalChunks: 0 
+        };
         let isBusy = false;
 
         async function initApp() {
             const code = document.getElementById('credentialInput').value.trim();
             if(code.length !== 32) return alert("凭证需32位");
-            setStatus("🔐 正在接入国内 STUN...");
+            setStatus("🔐 正在加密连接...");
             setTimeout(async () => {
                 try {
                     const roomId = await SecurityCore.init(code);
@@ -138,22 +145,17 @@
             if(peer) peer.destroy();
             peer = new Peer(roomId, {
                 host: '0.peerjs.com', port: 443, secure: true, path: '/',
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.miwifi.com' },
-                        { urls: 'stun:stun.chat.bilibili.com'},
-                        { urls: 'stun:stun.qq.com' }
-                    ]
-                }
+                config: { iceServers: [
+                    { urls: 'stun:stun.miwifi.com' },
+                    { urls: 'stun:stun.chat.bilibili.com' },
+                    { urls: 'stun:stun.qq.com' }
+                ]}
             });
             peer.on('open', () => { setStatus("✅ 节点就绪 (CN-STUN)"); peer.on('connection', setupConn); });
             peer.on('error', e => {
                 if(e.type === 'unavailable-id') {
                     setStatus("🔗 连接房主...");
-                    const guest = new Peer({
-                        host: '0.peerjs.com', port: 443, secure: true, path: '/',
-                        config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }] }
-                    });
+                    const guest = new Peer({ host: '0.peerjs.com', port: 443, secure: true, path: '/', config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }] } });
                     guest.on('open', () => setupConn(guest.connect(roomId)));
                 } else setStatus("❌ " + e.type);
             });
@@ -166,143 +168,202 @@
             conn.on('close', () => setStatus("🔌 断开"));
         }
 
+        // --- 发送逻辑：增加 seq 序号 ---
         document.getElementById('fileInput').addEventListener('change', async e => {
             const file = e.target.files[0];
             if(!file || !conn) return;
             if(isBusy) return alert("忙碌中");
             isBusy = true;
-            document.getElementById('progress-box').style.display = 'block';
+            document.getElementById('prog-box').style.display = 'block';
             
-            // 明确传递文件类型，防止丢失
-            conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type || 'application/octet-stream' });
+            // 计算总片数
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            
+            // 发送元数据
+            conn.send({ 
+                type: 'meta', 
+                name: file.name, 
+                size: file.size, 
+                mime: file.type || 'application/octet-stream',
+                total: totalChunks // 告知对方总片数
+            });
             
             let offset = 0;
+            let seq = 0; // 当前页码
             const reader = new FileReader();
+
             const readNext = () => {
                 const slice = file.slice(offset, offset + CHUNK_SIZE);
                 reader.readAsArrayBuffer(slice);
             };
+
             reader.onload = async (evt) => {
                 if(!conn || !conn.open) return;
                 const encrypted = await SecurityCore.encrypt(evt.target.result);
-                conn.send(encrypted); 
+                
+                // 🔥 核心修改：发送时带上 seq 序号
+                conn.send({
+                    type: 'chunk',
+                    seq: seq,
+                    payload: encrypted
+                });
+
                 offset += CHUNK_SIZE;
+                seq++;
+                
                 const percent = Math.min(100, Math.round((offset / file.size) * 100));
-                updateBar(percent, `⬆ 发送中`);
-                if (offset < file.size) setTimeout(readNext, 0); 
-                else {
-                    conn.send({ type: 'end' });
+                updateBar(percent, offset, file.size, "发送中");
+
+                if (offset < file.size) {
+                    setTimeout(readNext, 0); 
+                } else {
+                    conn.send({ type: 'end' }); // 结束信号
                     isBusy = false;
-                    addLog(file.name, "⬆ 发送", formatSize(file.size), null, file.type);
+                    addHistory(file.name, "⬆ 发送", formatSize(file.size), null, file.type);
                     setStatus("✅ 发送完毕");
-                    setTimeout(()=>document.getElementById('progress-box').style.display='none', 2000);
                 }
             };
             readNext();
         });
 
+        // --- 接收逻辑：严格按 seq 归位 ---
         async function handleData(data) {
-            if (data.type) {
-                if (data.type === 'meta') {
-                    incoming = { chunks: [], meta: data, recvSize: 0 };
-                    isBusy = true;
-                    document.getElementById('progress-box').style.display = 'block';
-                    setStatus(`⬇ 接收: ${data.name}`);
-                } else if (data.type === 'end') {
-                    finishReceive();
+            // 1. 元数据
+            if (data.type === 'meta') {
+                incoming = { 
+                    chunks: new Array(data.total), // 预分配数组
+                    meta: data, 
+                    receivedCount: 0,
+                    receivedBytes: 0,
+                    totalChunks: data.total
+                };
+                isBusy = true;
+                document.getElementById('prog-box').style.display = 'block';
+                setStatus(`⬇ 接收: ${data.name}`);
+                return;
+            }
+
+            // 2. 数据分片 (带序号)
+            if (data.type === 'chunk' && isBusy) {
+                try {
+                    const decrypted = await SecurityCore.decrypt(data.payload);
+                    
+                    // 🔥 核心修改：按序号存入对应位置，防止乱序
+                    incoming.chunks[data.seq] = decrypted;
+                    incoming.receivedCount++;
+                    incoming.receivedBytes += decrypted.byteLength;
+
+                    const percent = Math.min(100, Math.round((incoming.receivedCount / incoming.totalChunks) * 100));
+                    updateBar(percent, incoming.receivedBytes, incoming.meta.size, "接收中");
+
+                } catch(e) {
+                    console.error("Chunk error:", e);
+                    // 即使解密失败也不要中断整个流程，但这块数据会丢失
                 }
                 return;
             }
-            if (isBusy && data instanceof ArrayBuffer) {
-                try {
-                    const decrypted = await SecurityCore.decrypt(data);
-                    incoming.chunks.push(decrypted);
-                    incoming.recvSize += decrypted.byteLength;
-                    const percent = Math.min(100, Math.round((incoming.recvSize / incoming.meta.size) * 100));
-                    updateBar(percent, `⬇ 接收中`);
-                } catch(e) { isBusy = false; setStatus("❌ 解密失败"); }
+
+            // 3. 结束信号
+            if (data.type === 'end') {
+                finishReceive();
             }
         }
 
         function finishReceive() {
-            // 🔥 核心修复：确保 Blob 使用正确的 MIME 类型
+            // 完整性检查：检查是否有空洞
+            let missing = 0;
+            for(let i=0; i<incoming.totalChunks; i++) {
+                if(!incoming.chunks[i]) missing++;
+            }
+
+            if(missing > 0) {
+                alert(`警告：文件损坏！丢失了 ${missing} 个分片。网络环境可能极其恶劣。`);
+                setStatus("❌ 接收失败 (丢包)");
+                isBusy = false;
+                return;
+            }
+
+            // 合并 Blob
             let mime = incoming.meta.mime;
-            // 如果发送端没传类型，根据后缀名猜一下（针对部分安卓机）
-            if(!mime || mime === 'application/octet-stream') {
+            if(!mime || mime==='application/octet-stream') {
                 if(incoming.meta.name.match(/\.mp4$/i)) mime = 'video/mp4';
-                else if(incoming.meta.name.match(/\.mov$/i)) mime = 'video/quicktime';
-                else if(incoming.meta.name.match(/\.webm$/i)) mime = 'video/webm';
+                else if(incoming.meta.name.match(/\.(jpg|png|jpeg)$/i)) mime = 'image/jpeg';
             }
 
             const blob = new Blob(incoming.chunks, { type: mime });
             const url = URL.createObjectURL(blob);
             
-            addLog(incoming.meta.name, "⬇ 收到", formatSize(incoming.meta.size), url, mime);
+            addHistory(incoming.meta.name, "⬇ 收到", formatSize(incoming.meta.size), url, mime);
             
             isBusy = false;
-            incoming = { chunks: [], meta: null };
-            setStatus("✅ 接收完成");
-            setTimeout(()=>document.getElementById('progress-box').style.display='none', 2000);
+            // 释放内存
+            incoming.chunks = []; 
+            setStatus("✅ 接收完成 (完整性校验通过)");
         }
 
-        function generateCredential() {
-            const arr = new Uint8Array(16); crypto.getRandomValues(arr);
-            document.getElementById('credentialInput').value = Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
+        // --- UI 工具 ---
+        function updateBar(p, curr, total, txt) {
+            document.getElementById('p-fill').style.width = p + '%';
+            document.getElementById('p-txt').innerText = `${txt} ${p}%`;
+            document.getElementById('p-detail').innerText = `${formatSize(curr)}/${formatSize(total)}`;
         }
-        function updateBar(p, txt) { document.getElementById('p-fill').style.width = p + '%'; document.getElementById('p-text').textContent = `${txt} ${p}%`; }
-        
-        // 🔥 V18 核心修复：智能显示播放器
-        function addLog(name, type, size, url, mime) {
+
+        function addHistory(name, type, size, url, mime) {
             const div = document.getElementById('history');
             if(div.innerText.includes('暂无')) div.innerHTML = '';
             
-            let mediaHtml = '';
-            
-            // 如果是视频，直接渲染 video 标签
-            if (url && mime && mime.startsWith('video/')) {
-                mediaHtml = `<video src="${url}" controls class="media-preview" playsinline></video>`;
-            } 
-            // 如果是图片，渲染 img
-            else if (url && mime && mime.startsWith('image/')) {
-                mediaHtml = `<img src="${url}" class="media-preview" style="object-fit:contain">`;
+            let preview = '';
+            if (url) {
+                if (mime && mime.startsWith('video/')) preview = `<video src="${url}" controls class="media-preview" playsinline></video>`;
+                else if (mime && mime.startsWith('image/')) preview = `<img src="${url}" class="media-preview">`;
             }
 
-            const color = type.includes('发送') ? '#e91e63' : '#10b981';
-            
+            const isSend = type.includes('发送');
             const html = `
-                <div class="history-item">
-                    <div class="history-meta">
-                        <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:70%;">
-                            <span style="color:${color};font-weight:bold">${type}</span> ${name} 
-                            <span style="color:#999">(${size})</span>
-                        </div>
-                        ${url ? `<a href="${url}" download="${name}" class="btn-save">💾 保存</a>` : '<span style="color:#ccc">已发送</span>'}
+                <div class="log-item">
+                    <div class="log-top">
+                        <div style="font-weight:600; color:${isSend?'#0066cc':'#34c759'}">${type}</div>
+                        <div style="font-size:0.9em; color:#86868b">${size}</div>
                     </div>
-                    ${mediaHtml}
+                    <div style="word-break:break-all; font-family:monospace;">${name}</div>
+                    ${url ? `<div style="margin-top:5px; display:flex; gap:10px; align-items:center;">
+                        <a href="${url}" download="${name}" class="btn-dl">保存到本地</a>
+                    </div>` : ''}
+                    ${preview}
                 </div>`;
             div.innerHTML = html + div.innerHTML;
         }
 
+        function genKey() {
+            const arr = new Uint8Array(16); crypto.getRandomValues(arr);
+            document.getElementById('credentialInput').value = Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
+        }
         function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
-        function setStatus(s) { document.getElementById('status').textContent = s; }
+        function setStatus(s) { document.getElementById('status').innerText = s; }
 
+        // QR 相关
         let html5QrCode;
-        window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value = location.hash.split('c=')[1]; setTimeout(initApp, 500); history.replaceState(null, null, ' '); } };
-        function showGenQR() {
+        window.onload = () => {
+            if(location.hash.includes('c=')) {
+                document.getElementById('credentialInput').value = location.hash.split('c=')[1];
+                setTimeout(initApp, 500); history.replaceState(null, null, ' ');
+            }
+        };
+        function showQR() {
             const c = document.getElementById('credentialInput').value;
             if(c.length!=32) return alert("需32位凭证");
-            document.getElementById('gen-modal').style.display = 'flex';
+            document.getElementById('qr-modal').style.display = 'flex';
             document.getElementById('qrcode-gen').innerHTML = '';
-            new QRCode(document.getElementById('qrcode-gen'), { text: location.href.split('#')[0]+'#c='+c, width: 220, height: 220 });
+            new QRCode(document.getElementById('qrcode-gen'), { text: location.href.split('#')[0]+'#c='+c, width: 200, height: 200 });
         }
-        function startCameraScan() {
+        function scanQR() {
             document.getElementById('scan-modal').style.display = 'flex';
             html5QrCode = new Html5Qrcode("reader");
             html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
-                (decodedText) => { stopCameraScan(); const code = decodedText.includes('c=') ? decodedText.split('c=')[1] : decodedText; if(code.length===32) { document.getElementById('credentialInput').value = code; setTimeout(initApp, 500); } }
-            ).catch(() => { alert("无法启动摄像头(需HTTPS)"); stopCameraScan(); });
+                (decodedText) => { stopScan(); const code = decodedText.includes('c=') ? decodedText.split('c=')[1] : decodedText; if(code.length===32) { document.getElementById('credentialInput').value = code; setTimeout(initApp, 500); } }
+            ).catch(() => { alert("无法启动摄像头(需HTTPS)"); stopScan(); });
         }
-        function stopCameraScan() { if(html5QrCode) html5QrCode.stop().then(() => { html5QrCode.clear(); document.getElementById('scan-modal').style.display = 'none'; }).catch(()=>{}); else document.getElementById('scan-modal').style.display = 'none'; }
+        function stopScan() { if(html5QrCode) html5QrCode.stop().then(() => { html5QrCode.clear(); document.getElementById('scan-modal').style.display = 'none'; }).catch(()=>{}); else document.getElementById('scan-modal').style.display = 'none'; }
     </script>
 </body>
 </html>
