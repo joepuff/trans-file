@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>32位暗房 (V13 Cloudflare适配版)</title>
+    <title>P2P文件中转站 (V14 Camera)</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
-        :root { --primary: #007bff; --accent: #6610f2; --bg: #f8f9fa; }
+        :root { --primary: #007bff; --bg: #f8f9fa; }
         body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px; background: var(--bg); color: #333; }
         
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 15px; }
@@ -16,18 +17,20 @@
         .input-group { display: flex; gap: 8px; margin-bottom: 15px; }
         input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: monospace; min-width: 0; }
         
-        button { padding: 0 15px; height: 42px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap; }
-        button:active { transform: scale(0.98); }
+        button { padding: 0 12px; height: 42px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap; }
+        button:active { transform: scale(0.96); }
+        
+        /* 按钮色系 */
         .btn-rand { background: #17a2b8; font-size: 1.2em; }
-        .btn-qr { background: #6c757d; font-size: 1.2em; }
+        .btn-show-qr { background: #6c757d; font-size: 1.2em; }
+        .btn-scan { background: #6610f2; font-size: 1.2em; } /* 紫色扫码按钮 */
         .btn-conn { background: var(--primary); }
 
         #status { font-size: 0.9em; color: #666; margin-bottom: 10px; padding: 8px; background: #f1f3f5; border-radius: 6px; text-align: center;}
 
         #panel { display: none; }
         .file-select { border: 2px dashed #007bff; padding: 30px; text-align: center; border-radius: 12px; background: #f0f7ff; cursor: pointer; }
-        .file-select:active { background: #e0efff; }
-
+        
         #progress-container { display: none; margin-top: 15px; }
         .progress-bar { height: 12px; background: #e9ecef; border-radius: 6px; overflow: hidden; }
         .progress-fill { height: 100%; background: #28a745; width: 0%; transition: width 0.1s linear; }
@@ -36,21 +39,27 @@
         .history-item { padding: 12px 0; border-bottom: 1px solid #eee; font-size: 0.9em; display: flex; justify-content: space-between; align-items: center; }
         .btn-save { display: inline-block; padding: 5px 10px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; font-size: 0.8em; }
 
-        #qr-modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
-        #qrcode { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        .qr-tip { color: white; margin-top: 20px; font-size: 0.9em; }
+        /* 生成二维码的弹窗 */
+        #gen-modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
+        #qrcode-gen { background: white; padding: 20px; border-radius: 16px; }
+
+        /* 扫描摄像头的弹窗 */
+        #scan-modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:1000; flex-direction: column; justify-content: center;}
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: black; }
+        .scan-close { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); padding: 10px 30px; background: rgba(255,255,255,0.2); border: 1px solid white; border-radius: 20px; color: white; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h3 style="margin-top:0">📂 V13 HTTPS 适配版</h3>
-        <div style="font-size:0.8em; color:#666; margin-bottom:15px;">适配 Cloudflare/Vercel • 支持 500MB+</div>
+        <h3 style="margin-top:0">📂 V14 扫一扫旗舰版</h3>
+        <div style="font-size:0.8em; color:#666; margin-bottom:15px;">内置摄像头扫描 • 500MB+流式传输</div>
         
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="32位凭证" maxlength="32">
             <button class="btn-rand" onclick="generateCredential()" title="随机生成">🎲</button>
-            <button class="btn-qr" onclick="showQR()" title="扫码连接">📱</button>
-            <button class="btn-conn" onclick="initApp()">🚀 连接</button>
+            <button class="btn-show-qr" onclick="showGenQR()" title="展示二维码">📱</button>
+            <button class="btn-scan" onclick="startCameraScan()" title="打开摄像头扫一扫">📷</button>
+            <button class="btn-conn" onclick="initApp()">🚀</button>
         </div>
         
         <div id="status">准备就绪</div>
@@ -77,12 +86,72 @@
         </div>
     </div>
 
-    <div id="qr-modal" onclick="this.style.display='none'">
-        <div id="qrcode"></div>
-        <div class="qr-tip">对方扫码后，请回到此页面点击“连接”</div>
+    <div id="gen-modal" onclick="this.style.display='none'">
+        <div id="qrcode-gen"></div>
+        <div style="color:white; margin-top:20px; font-size:0.9em">让对方扫描此码连接</div>
+    </div>
+
+    <div id="scan-modal">
+        <div id="reader"></div>
+        <button class="scan-close" onclick="stopCameraScan()">关闭摄像头</button>
     </div>
 
     <script>
+        // --- V14 新增：摄像头扫描逻辑 ---
+        let html5QrCode;
+
+        function startCameraScan() {
+            document.getElementById('scan-modal').style.display = 'flex';
+            
+            // 初始化扫描器
+            html5QrCode = new Html5Qrcode("reader");
+            
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            // 启动摄像头 (优先后置)
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure)
+            .catch(err => {
+                alert("无法启动摄像头，请确保使用HTTPS访问并允许权限。\n错误: " + err);
+                stopCameraScan();
+            });
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // 停止扫描
+            stopCameraScan();
+            
+            // 解析内容
+            // 格式可能是 "https://...?#c=abcdef..." 或者直接是 "abcdef..."
+            let code = decodedText;
+            if (decodedText.includes('c=')) {
+                code = decodedText.split('c=')[1];
+            }
+
+            if (code && code.length === 32) {
+                document.getElementById('credentialInput').value = code;
+                // 自动连接
+                setTimeout(() => initApp(), 500);
+            } else {
+                alert("扫描到的内容不是有效的32位凭证");
+            }
+        }
+
+        function onScanFailure(error) {
+            // 扫描中未发现二维码，忽略错误
+        }
+
+        function stopCameraScan() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    document.getElementById('scan-modal').style.display = 'none';
+                }).catch(err => console.error("停止失败", err));
+            } else {
+                document.getElementById('scan-modal').style.display = 'none';
+            }
+        }
+
+        // --- 以下为 V13 核心逻辑 (保持不变) ---
         const CHUNK_SIZE = 64 * 1024; 
         const CONFIG = {
             pbkdf2: { name: "PBKDF2", hash: "SHA-256", iterations: 100000 },
@@ -94,7 +163,7 @@
             async initKey(password) {
                 const enc = new TextEncoder();
                 const keyMat = await crypto.subtle.importKey("raw", enc.encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
-                const salt = enc.encode("V13_HTTPS_SALT_FIXED"); 
+                const salt = enc.encode("V14_SALT_FIXED"); 
                 this.key = await crypto.subtle.deriveKey({...CONFIG.pbkdf2, salt}, keyMat, CONFIG.aes, false, ["encrypt", "decrypt"]);
             },
             async encryptChunk(chunk) {
@@ -133,13 +202,12 @@
             const roomId = await hashId(code);
             if(peer) peer.destroy();
             
-            setStatus("🌐 连接安全节点(SSL)...");
+            setStatus("🌐 连接节点(SSL)...");
 
-            // --- 核心修复：HTTPS 适配配置 ---
             peer = new Peer(roomId, {
                 host: '0.peerjs.com',
                 port: 443,
-                secure: true, // 必须为 true
+                secure: true,
                 path: '/',
                 config: {
                     iceServers: [
@@ -154,7 +222,6 @@
                 peer.on('connection', setupConn);
             });
             peer.on('error', e => {
-                console.error(e);
                 if(e.type === 'unavailable-id') {
                     setStatus("🔗 连接房主...");
                     const guest = new Peer({
@@ -279,6 +346,7 @@
         function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
         function setStatus(s) { document.getElementById('status').textContent = s; }
         
+        // 自动解析 URL Hash (给微信扫一扫直接打开用)
         window.onload = () => {
             if(location.hash.includes('c=')) {
                 document.getElementById('credentialInput').value = location.hash.split('c=')[1];
@@ -287,12 +355,13 @@
             }
         };
         
-        function showQR() {
+        // 生成二维码逻辑
+        function showGenQR() {
             const c = document.getElementById('credentialInput').value;
             if(c.length!=32) return alert("请先生成或输入32位凭证");
-            document.getElementById('qr-modal').style.display = 'flex';
-            document.getElementById('qrcode').innerHTML = '';
-            new QRCode(document.getElementById('qrcode'), {
+            document.getElementById('gen-modal').style.display = 'flex';
+            document.getElementById('qrcode-gen').innerHTML = '';
+            new QRCode(document.getElementById('qrcode-gen'), {
                 text: location.href.split('#')[0]+'#c='+c,
                 width: 220, height: 220
             });
