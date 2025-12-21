@@ -3,34 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>p2p文件中转(V16 CN-Optimized)</title>
+    <title>p2p文件中转(V18 VideoFix)</title>
     
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
-        :root { --primary: #d93025; --dark: #202124; --bg: #f1f3f4; --text: #333; }
-        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px; background: var(--bg); color: var(--text); }
-        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 15px; }
-        .tag { font-size: 0.75em; background: #e8f0fe; color: #1967d2; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px; }
+        :root { --primary: #e91e63; --bg: #fdf2f8; } /* 换个粉色系区分版本 */
+        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px; background: var(--bg); color: #333; }
+        
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .tag { font-size: 0.75em; background: #fce7f3; color: #be185d; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px; }
+        
         .input-group { display: flex; gap: 8px; margin-bottom: 15px; }
-        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #dadce0; border-radius: 8px; font-family: monospace; min-width: 0; }
+        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-family: monospace; min-width: 0; }
         button { padding: 0 14px; height: 44px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.96); }
-        .btn-rand { background: #1a73e8; }
-        .btn-qr { background: #5f6368; }
-        .btn-scan { background: #9334e6; }
+        .btn-rand { background: #0ea5e9; }
+        .btn-qr { background: #64748b; }
+        .btn-scan { background: #8b5cf6; }
         .btn-conn { background: var(--primary); width: 80px;}
-        #status { font-size: 0.9em; color: #5f6368; margin-bottom: 15px; padding: 10px; background: #e8eaed; border-radius: 6px; text-align: center; }
-        .file-select { border: 2px dashed var(--primary); padding: 30px; text-align: center; border-radius: 12px; background: #fce8e6; cursor: pointer; }
+        
+        #status { font-size: 0.9em; color: #666; margin-bottom: 15px; padding: 10px; background: #fff1f2; border-radius: 6px; text-align: center; border: 1px dashed #fecdd3; }
+        
+        .file-select { border: 2px dashed var(--primary); padding: 30px; text-align: center; border-radius: 12px; background: #fff; cursor: pointer; }
+        
         .progress-container { margin-top: 15px; display: none; }
-        .progress-bar { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+        .progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.1s linear; }
-        .progress-text { font-size: 0.8em; text-align: center; margin-top: 5px; color: #5f6368; }
-        .history-item { padding: 12px 0; border-bottom: 1px solid #eee; font-size: 0.9em; display: flex; justify-content: space-between; align-items: center; }
-        .btn-save { padding: 4px 10px; background: #188038; color: white; text-decoration: none; border-radius: 4px; font-size: 0.8em; }
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
+        .progress-text { font-size: 0.8em; text-align: center; margin-top: 5px; color: #666; }
+
+        .history-item { padding: 15px 0; border-bottom: 1px solid #eee; font-size: 0.9em; }
+        .history-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .btn-save { padding: 6px 12px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; font-size: 0.9em; display: inline-block;}
+        
+        /* V18 新增：视频播放器样式 */
+        .media-preview { width: 100%; margin-top: 10px; border-radius: 8px; background: black; max-height: 400px; }
+        
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
         #qrcode-gen { background: white; padding: 20px; border-radius: 16px; }
         #reader { width: 100%; max-width: 500px; border-radius: 8px; overflow: hidden; }
         .close-btn { margin-top: 20px; background: transparent; border: 1px solid white; color: white; }
@@ -39,15 +49,15 @@
 <body>
     <div class="card">
         <h3 style="margin-top:0; display:flex; align-items:center;">
-            🇨🇳 V16 国内畅连版
-            <span class="tag">CN-Optimized</span>
+            🎬 V18 视频修复版
+            <span class="tag">Player-Inside</span>
         </h3>
         
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="32位凭证" maxlength="32">
-            <button class="btn-rand" onclick="generateCredential()" title="生成">🎲</button>
-            <button class="btn-qr" onclick="showGenQR()" title="展示码">📱</button>
-            <button class="btn-scan" onclick="startCameraScan()" title="扫一扫">📷</button>
+            <button class="btn-rand" onclick="generateCredential()">🎲</button>
+            <button class="btn-qr" onclick="showGenQR()">📱</button>
+            <button class="btn-scan" onclick="startCameraScan()">📷</button>
             <button class="btn-conn" onclick="initApp()">🚀</button>
         </div>
         
@@ -56,8 +66,8 @@
         <div id="panel" style="display:none;">
             <div class="file-select" onclick="document.getElementById('fileInput').click()">
                 <div style="font-size:2.5em; margin-bottom:5px">📤</div>
-                <div>点击选择文件</div>
-                <div style="font-size:0.8em; color:#d93025; margin-top:5px">已切换至国内 STUN 节点</div>
+                <div>点击选择文件/视频</div>
+                <div style="font-size:0.8em; color:#e91e63; margin-top:5px">支持视频在线播放</div>
                 <input type="file" id="fileInput" style="display:none">
             </div>
             <div class="progress-container" id="progress-box">
@@ -74,21 +84,15 @@
         </div>
     </div>
 
-    <div id="gen-modal" class="modal" onclick="this.style.display='none'">
-        <div id="qrcode-gen"></div>
-    </div>
-    <div id="scan-modal" class="modal">
-        <div id="reader"></div>
-        <button class="close-btn" onclick="stopCameraScan()">关闭摄像头</button>
-    </div>
+    <div id="gen-modal" class="modal" onclick="this.style.display='none'"><div id="qrcode-gen"></div></div>
+    <div id="scan-modal" class="modal"><div id="reader"></div><button class="close-btn" onclick="stopCameraScan()">关闭摄像头</button></div>
 
     <script>
         const CHUNK_SIZE = 64 * 1024; 
         const CONFIG = {
             pbkdf2: { name: "PBKDF2", hash: "SHA-256", iterations: 500000 },
             aes: { name: "AES-GCM", length: 256 },
-            salt_room: "V16_CN_ROOM_SALT",
-            salt_key:  "V16_CN_KEY_SALT"
+            salt_room: "V18_VIDEO_ROOM_SALT", salt_key: "V18_VIDEO_KEY_SALT"
         };
 
         const SecurityCore = {
@@ -121,8 +125,7 @@
         async function initApp() {
             const code = document.getElementById('credentialInput').value.trim();
             if(code.length !== 32) return alert("凭证需32位");
-
-            setStatus("🔐 正在接入国内网络...");
+            setStatus("🔐 正在接入国内 STUN...");
             setTimeout(async () => {
                 try {
                     const roomId = await SecurityCore.init(code);
@@ -132,55 +135,33 @@
         }
 
         function connectPeer(roomId) {
-            setStatus("🌐 正在穿透 NAT...");
             if(peer) peer.destroy();
-            
             peer = new Peer(roomId, {
-                // 使用公共信令服务器
-                host: '0.peerjs.com', 
-                port: 443, 
-                secure: true, 
-                path: '/',
+                host: '0.peerjs.com', port: 443, secure: true, path: '/',
                 config: {
-                    // 🔥 核心修改：使用国内 STUN 服务器
                     iceServers: [
-                        { urls: 'stun:stun.miwifi.com' },       // 小米
-                        { urls: 'stun:stun.chat.bilibili.com'}, // B站
-                        { urls: 'stun:stun.qq.com' },           // 腾讯
-                        { urls: 'stun:stun.l.google.com:19302' }// 谷歌(备用)
+                        { urls: 'stun:stun.miwifi.com' },
+                        { urls: 'stun:stun.chat.bilibili.com'},
+                        { urls: 'stun:stun.qq.com' }
                     ]
                 }
             });
-
-            peer.on('open', () => {
-                setStatus("✅ 节点就绪 (CN-STUN)");
-                peer.on('connection', setupConn);
-            });
-            
+            peer.on('open', () => { setStatus("✅ 节点就绪 (CN-STUN)"); peer.on('connection', setupConn); });
             peer.on('error', e => {
                 if(e.type === 'unavailable-id') {
-                    setStatus("🔗 正在连接...");
-                    // 同样配置国内 STUN
+                    setStatus("🔗 连接房主...");
                     const guest = new Peer({
                         host: '0.peerjs.com', port: 443, secure: true, path: '/',
-                        config: { 
-                            iceServers: [
-                                { urls: 'stun:stun.miwifi.com' },
-                                { urls: 'stun:stun.chat.bilibili.com'}
-                            ] 
-                        }
+                        config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }] }
                     });
                     guest.on('open', () => setupConn(guest.connect(roomId)));
-                } else setStatus("❌ 网络错误: " + e.type);
+                } else setStatus("❌ " + e.type);
             });
         }
 
         function setupConn(c) {
             conn = c;
-            conn.on('open', () => {
-                setStatus("🤝 互联成功");
-                document.getElementById('panel').style.display = 'block';
-            });
+            conn.on('open', () => { setStatus("🤝 连接成功"); document.getElementById('panel').style.display = 'block'; });
             conn.on('data', handleData);
             conn.on('close', () => setStatus("🔌 断开"));
         }
@@ -189,10 +170,11 @@
             const file = e.target.files[0];
             if(!file || !conn) return;
             if(isBusy) return alert("忙碌中");
-            
             isBusy = true;
             document.getElementById('progress-box').style.display = 'block';
-            conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type });
+            
+            // 明确传递文件类型，防止丢失
+            conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type || 'application/octet-stream' });
             
             let offset = 0;
             const reader = new FileReader();
@@ -200,7 +182,6 @@
                 const slice = file.slice(offset, offset + CHUNK_SIZE);
                 reader.readAsArrayBuffer(slice);
             };
-
             reader.onload = async (evt) => {
                 if(!conn || !conn.open) return;
                 const encrypted = await SecurityCore.encrypt(evt.target.result);
@@ -212,7 +193,7 @@
                 else {
                     conn.send({ type: 'end' });
                     isBusy = false;
-                    addLog(file.name, "⬆ 发送", formatSize(file.size));
+                    addLog(file.name, "⬆ 发送", formatSize(file.size), null, file.type);
                     setStatus("✅ 发送完毕");
                     setTimeout(()=>document.getElementById('progress-box').style.display='none', 2000);
                 }
@@ -244,12 +225,23 @@
         }
 
         function finishReceive() {
-            const blob = new Blob(incoming.chunks, { type: incoming.meta.mime });
+            // 🔥 核心修复：确保 Blob 使用正确的 MIME 类型
+            let mime = incoming.meta.mime;
+            // 如果发送端没传类型，根据后缀名猜一下（针对部分安卓机）
+            if(!mime || mime === 'application/octet-stream') {
+                if(incoming.meta.name.match(/\.mp4$/i)) mime = 'video/mp4';
+                else if(incoming.meta.name.match(/\.mov$/i)) mime = 'video/quicktime';
+                else if(incoming.meta.name.match(/\.webm$/i)) mime = 'video/webm';
+            }
+
+            const blob = new Blob(incoming.chunks, { type: mime });
             const url = URL.createObjectURL(blob);
-            addLog(incoming.meta.name, "⬇ 收到", formatSize(incoming.meta.size), url);
+            
+            addLog(incoming.meta.name, "⬇ 收到", formatSize(incoming.meta.size), url, mime);
+            
             isBusy = false;
             incoming = { chunks: [], meta: null };
-            setStatus("✅ 完成");
+            setStatus("✅ 接收完成");
             setTimeout(()=>document.getElementById('progress-box').style.display='none', 2000);
         }
 
@@ -257,27 +249,45 @@
             const arr = new Uint8Array(16); crypto.getRandomValues(arr);
             document.getElementById('credentialInput').value = Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
         }
-        function updateBar(p, txt) {
-            document.getElementById('p-fill').style.width = p + '%';
-            document.getElementById('p-text').textContent = `${txt} ${p}%`;
-        }
-        function addLog(name, type, size, url) {
+        function updateBar(p, txt) { document.getElementById('p-fill').style.width = p + '%'; document.getElementById('p-text').textContent = `${txt} ${p}%`; }
+        
+        // 🔥 V18 核心修复：智能显示播放器
+        function addLog(name, type, size, url, mime) {
             const div = document.getElementById('history');
             if(div.innerText.includes('暂无')) div.innerHTML = '';
-            const color = type.includes('发送') ? '#d93025' : '#188038';
-            div.innerHTML = `<div class="history-item"><div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:70%;"><span style="color:${color};font-weight:bold">${type}</span> ${name} <span style="color:#999">(${size})</span></div>${url ? `<a href="${url}" download="${name}" class="btn-save">保存</a>` : '<span style="color:#ccc">完成</span>'}</div>` + div.innerHTML;
+            
+            let mediaHtml = '';
+            
+            // 如果是视频，直接渲染 video 标签
+            if (url && mime && mime.startsWith('video/')) {
+                mediaHtml = `<video src="${url}" controls class="media-preview" playsinline></video>`;
+            } 
+            // 如果是图片，渲染 img
+            else if (url && mime && mime.startsWith('image/')) {
+                mediaHtml = `<img src="${url}" class="media-preview" style="object-fit:contain">`;
+            }
+
+            const color = type.includes('发送') ? '#e91e63' : '#10b981';
+            
+            const html = `
+                <div class="history-item">
+                    <div class="history-meta">
+                        <div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:70%;">
+                            <span style="color:${color};font-weight:bold">${type}</span> ${name} 
+                            <span style="color:#999">(${size})</span>
+                        </div>
+                        ${url ? `<a href="${url}" download="${name}" class="btn-save">💾 保存</a>` : '<span style="color:#ccc">已发送</span>'}
+                    </div>
+                    ${mediaHtml}
+                </div>`;
+            div.innerHTML = html + div.innerHTML;
         }
+
         function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
         function setStatus(s) { document.getElementById('status').textContent = s; }
 
-        // 扫码相关
         let html5QrCode;
-        window.onload = () => {
-            if(location.hash.includes('c=')) {
-                document.getElementById('credentialInput').value = location.hash.split('c=')[1];
-                setTimeout(initApp, 500); history.replaceState(null, null, ' ');
-            }
-        };
+        window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value = location.hash.split('c=')[1]; setTimeout(initApp, 500); history.replaceState(null, null, ' '); } };
         function showGenQR() {
             const c = document.getElementById('credentialInput').value;
             if(c.length!=32) return alert("需32位凭证");
@@ -289,17 +299,10 @@
             document.getElementById('scan-modal').style.display = 'flex';
             html5QrCode = new Html5Qrcode("reader");
             html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
-                (decodedText) => {
-                    stopCameraScan();
-                    const code = decodedText.includes('c=') ? decodedText.split('c=')[1] : decodedText;
-                    if(code.length===32) { document.getElementById('credentialInput').value = code; setTimeout(initApp, 500); }
-                }
+                (decodedText) => { stopCameraScan(); const code = decodedText.includes('c=') ? decodedText.split('c=')[1] : decodedText; if(code.length===32) { document.getElementById('credentialInput').value = code; setTimeout(initApp, 500); } }
             ).catch(() => { alert("无法启动摄像头(需HTTPS)"); stopCameraScan(); });
         }
-        function stopCameraScan() {
-            if(html5QrCode) html5QrCode.stop().then(() => { html5QrCode.clear(); document.getElementById('scan-modal').style.display = 'none'; }).catch(()=>{});
-            else document.getElementById('scan-modal').style.display = 'none';
-        }
+        function stopCameraScan() { if(html5QrCode) html5QrCode.stop().then(() => { html5QrCode.clear(); document.getElementById('scan-modal').style.display = 'none'; }).catch(()=>{}); else document.getElementById('scan-modal').style.display = 'none'; }
     </script>
 </body>
 </html>
