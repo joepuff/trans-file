@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>32位暗房 (V12 Ultimate)</title>
-    <script src="https://cdn.bootcdn.net/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
-    <script src="https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <title>32位暗房 (V13 Cloudflare适配版)</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     
     <style>
         :root { --primary: #007bff; --accent: #6610f2; --bg: #f8f9fa; }
@@ -13,7 +13,6 @@
         
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 15px; }
         
-        /* 按钮组优化：适配手机宽度 */
         .input-group { display: flex; gap: 8px; margin-bottom: 15px; }
         input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: monospace; min-width: 0; }
         
@@ -25,22 +24,18 @@
 
         #status { font-size: 0.9em; color: #666; margin-bottom: 10px; padding: 8px; background: #f1f3f5; border-radius: 6px; text-align: center;}
 
-        /* 传输面板 */
         #panel { display: none; }
         .file-select { border: 2px dashed #007bff; padding: 30px; text-align: center; border-radius: 12px; background: #f0f7ff; cursor: pointer; }
         .file-select:active { background: #e0efff; }
 
-        /* 进度条 */
         #progress-container { display: none; margin-top: 15px; }
         .progress-bar { height: 12px; background: #e9ecef; border-radius: 6px; overflow: hidden; }
         .progress-fill { height: 100%; background: #28a745; width: 0%; transition: width 0.1s linear; }
         .progress-text { font-size: 0.8em; text-align: center; margin-top: 5px; color: #666; font-variant-numeric: tabular-nums; }
 
-        /* 历史记录 */
         .history-item { padding: 12px 0; border-bottom: 1px solid #eee; font-size: 0.9em; display: flex; justify-content: space-between; align-items: center; }
         .btn-save { display: inline-block; padding: 5px 10px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; font-size: 0.8em; }
 
-        /* 二维码弹窗 */
         #qr-modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); justify-content:center; align-items:center; z-index:999; flex-direction: column;}
         #qrcode { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
         .qr-tip { color: white; margin-top: 20px; font-size: 0.9em; }
@@ -48,8 +43,8 @@
 </head>
 <body>
     <div class="card">
-        <h3 style="margin-top:0">📂 V12 极速流式版</h3>
-        <div style="font-size:0.8em; color:#666; margin-bottom:15px;">支持 500MB+ • 随机凭证 • 内存不崩</div>
+        <h3 style="margin-top:0">📂 V13 HTTPS 适配版</h3>
+        <div style="font-size:0.8em; color:#666; margin-bottom:15px;">适配 Cloudflare/Vercel • 支持 500MB+</div>
         
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="32位凭证" maxlength="32">
@@ -78,7 +73,7 @@
     <div class="card">
         <h4 style="margin:0 0 10px 0">传输记录</h4>
         <div id="history">
-            <div style="text-align:center; color:#999; font-size:0.8em; padding:10px">暂无记录 (刷新即焚)</div>
+            <div style="text-align:center; color:#999; font-size:0.8em; padding:10px">暂无记录</div>
         </div>
     </div>
 
@@ -88,21 +83,18 @@
     </div>
 
     <script>
-        // --- 核心配置：64KB 分片 ---
         const CHUNK_SIZE = 64 * 1024; 
         const CONFIG = {
             pbkdf2: { name: "PBKDF2", hash: "SHA-256", iterations: 100000 },
             aes: { name: "AES-GCM", length: 256 }
         };
 
-        // --- 加密内核 (内存优化版) ---
         const CryptoCore = {
             key: null,
             async initKey(password) {
                 const enc = new TextEncoder();
                 const keyMat = await crypto.subtle.importKey("raw", enc.encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
-                // 固定 Salt 以简化握手 (生产环境可协商动态 Salt)
-                const salt = enc.encode("V12_STREAM_SALT_FIXED"); 
+                const salt = enc.encode("V13_HTTPS_SALT_FIXED"); 
                 this.key = await crypto.subtle.deriveKey({...CONFIG.pbkdf2, salt}, keyMat, CONFIG.aes, false, ["encrypt", "decrypt"]);
             },
             async encryptChunk(chunk) {
@@ -119,69 +111,82 @@
             }
         };
 
-        // --- 全局状态 ---
         let peer, conn;
         let incomingFile = { chunks: [], meta: null, receivedSize: 0 };
         let isTransferring = false;
-        let isReceiving = false; // 区分发送/接收状态
+        let isReceiving = false;
 
-        // --- 功能 1: 随机生成凭证 (找回的功能) ---
         function generateCredential() {
             const arr = new Uint8Array(16);
             crypto.getRandomValues(arr);
-            // 转 Hex
             const hex = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
             document.getElementById('credentialInput').value = hex;
         }
 
-        // --- 功能 2: P2P 连接逻辑 ---
         async function initApp() {
             const code = document.getElementById('credentialInput').value.trim();
             if(code.length !== 32) return alert("凭证必须是32位字符");
             
-            setStatus("🔐 正在生成加密密钥...");
+            setStatus("🔐 生成密钥...");
             await CryptoCore.initKey(code);
 
             const roomId = await hashId(code);
             if(peer) peer.destroy();
             
-            setStatus("🌐 正在连接节点...");
-            peer = new Peer(roomId);
+            setStatus("🌐 连接安全节点(SSL)...");
+
+            // --- 核心修复：HTTPS 适配配置 ---
+            peer = new Peer(roomId, {
+                host: '0.peerjs.com',
+                port: 443,
+                secure: true, // 必须为 true
+                path: '/',
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
 
             peer.on('open', () => {
-                setStatus("✅ 就绪！等待对方接入...");
+                setStatus("✅ 就绪！等待接入...");
                 peer.on('connection', setupConn);
             });
             peer.on('error', e => {
+                console.error(e);
                 if(e.type === 'unavailable-id') {
-                    // ID被占用，说明我是访客，主动连接
-                    setStatus("🔗 正在连接房主...");
-                    const guest = new Peer();
+                    setStatus("🔗 连接房主...");
+                    const guest = new Peer({
+                        host: '0.peerjs.com',
+                        port: 443,
+                        secure: true,
+                        path: '/',
+                        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+                    });
                     guest.on('open', () => setupConn(guest.connect(roomId)));
-                } else setStatus("❌ 网络错误: " + e.type);
+                } else setStatus("❌ 错误: " + e.type);
             });
         }
 
         function setupConn(c) {
             conn = c;
             conn.on('open', () => {
-                setStatus("🤝 加密通道已建立");
+                setStatus("🤝 通道建立");
                 document.getElementById('panel').style.display = 'block';
             });
             conn.on('data', handleData);
-            conn.on('close', () => setStatus("🔌 连接断开"));
+            conn.on('close', () => setStatus("🔌 断开"));
         }
 
-        // --- 功能 3: 分片发送 (Send) ---
         document.getElementById('fileInput').addEventListener('change', async e => {
             const file = e.target.files[0];
             if(!file || !conn) return;
-            if(isTransferring) return alert("当前有文件正在传输");
+            if(isTransferring) return alert("有传输任务中");
 
             isTransferring = true;
             showProgress(0);
             
-            // 1. 发送元数据
             conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type });
             
             let offset = 0;
@@ -194,17 +199,13 @@
 
             reader.onload = async (evt) => {
                 if(!conn || !conn.open) return;
-                
-                // 加密
                 const encrypted = await CryptoCore.encryptChunk(evt.target.result);
                 conn.send(encrypted); 
-
                 offset += CHUNK_SIZE;
                 const percent = Math.min(100, Math.round((offset / file.size) * 100));
-                updateProgress(percent, `⬆ 发送中: ${formatSize(offset)} / ${formatSize(file.size)}`);
-
+                updateProgress(percent, `⬆ 发送: ${formatSize(offset)} / ${formatSize(file.size)}`);
                 if (offset < file.size) {
-                    setTimeout(readNext, 0); // 让出主线程，防止界面卡死
+                    setTimeout(readNext, 0); 
                 } else {
                     conn.send({ type: 'end' });
                     isTransferring = false;
@@ -216,33 +217,27 @@
             readNext();
         });
 
-        // --- 功能 4: 分片接收 (Receive) ---
         async function handleData(data) {
-            // 控制信号
             if (data.type) {
                 if (data.type === 'meta') {
                     incomingFile = { chunks: [], meta: data, receivedSize: 0 };
                     isReceiving = true;
                     showProgress(0);
-                    setStatus(`⬇ 正在接收: ${data.name}`);
+                    setStatus(`⬇ 接收: ${data.name}`);
                 } else if (data.type === 'end') {
                     finishReceive();
                 }
                 return;
             }
-
-            // 数据流
             if (isReceiving && data instanceof ArrayBuffer) {
                 try {
                     const decrypted = await CryptoCore.decryptChunk(data);
                     incomingFile.chunks.push(decrypted);
                     incomingFile.receivedSize += decrypted.byteLength;
-                    
                     const percent = Math.min(100, Math.round((incomingFile.receivedSize / incomingFile.meta.size) * 100));
-                    updateProgress(percent, `⬇ 接收中: ${percent}%`);
+                    updateProgress(percent, `⬇ 接收: ${percent}%`);
                 } catch(e) {
-                    console.error(e);
-                    setStatus("❌ 解密失败 (凭证错误?)");
+                    setStatus("❌ 解密失败");
                     isReceiving = false;
                 }
             }
@@ -251,37 +246,28 @@
         function finishReceive() {
             const blob = new Blob(incomingFile.chunks, { type: incomingFile.meta.mime });
             const url = URL.createObjectURL(blob);
-            
             addHistory(incomingFile.meta.name, "⬇ 收到", formatSize(incomingFile.meta.size), url);
-            
             isReceiving = false;
             incomingFile = { chunks: [], meta: null, receivedSize: 0 };
             setStatus("✅ 接收完成");
             setTimeout(() => document.getElementById('progress-container').style.display='none', 3000);
         }
 
-        // --- 辅助工具 ---
-        function showProgress(p) { 
-            document.getElementById('progress-container').style.display = 'block'; 
-            updateProgress(p, '准备中...');
-        }
+        function showProgress(p) { document.getElementById('progress-container').style.display = 'block'; updateProgress(p, '准备...'); }
         function updateProgress(p, text) {
             document.getElementById('p-fill').style.width = p + '%';
             document.getElementById('p-text').textContent = text;
         }
         function addHistory(name, type, size, url) {
             const div = document.getElementById('history');
-            // 移除"暂无记录"提示
             if(div.innerText.includes('暂无记录')) div.innerHTML = '';
-            
             const html = `
                 <div class="history-item">
                     <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:65%;">
                         <span style="font-weight:bold; color:${type.includes('⬆')?'#007bff':'#28a745'}">${type}</span> 
                         ${name}
-                        <div style="font-size:0.8em; color:#999">${size}</div>
                     </div>
-                    ${url ? `<a href="${url}" download="${name}" class="btn-save">💾 保存</a>` : '<span style="color:#ccc; font-size:0.8em">已发送</span>'}
+                    ${url ? `<a href="${url}" download="${name}" class="btn-save">💾 保存</a>` : '<span style="color:#ccc">已发送</span>'}
                 </div>`;
             div.innerHTML = html + div.innerHTML;
         }
@@ -293,12 +279,11 @@
         function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
         function setStatus(s) { document.getElementById('status').textContent = s; }
         
-        // 扫码/URL自动填充
         window.onload = () => {
             if(location.hash.includes('c=')) {
                 document.getElementById('credentialInput').value = location.hash.split('c=')[1];
-                setTimeout(initApp, 500); // 自动连接
-                history.replaceState(null, null, ' '); // 清除Hash保护隐私
+                setTimeout(initApp, 500); 
+                history.replaceState(null, null, ' '); 
             }
         };
         
