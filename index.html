@@ -3,21 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>p2p中转(V21 ARQ-Fix)</title>
+    <title>p2p中转(V22 Multi-File)</title>
     
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
-        :root { --primary: #ff3b30; --bg: #f2f2f7; --card-bg: #fff; --text: #1c1c1e; }
+        :root { --primary: #5856d6; --bg: #f2f2f7; --card-bg: #fff; --text: #1c1c1e; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 16px; background: var(--bg); color: var(--text); }
         
         .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 20px; }
-        .tag { font-size: 0.7rem; background: #ffe4e4; color: #d60000; padding: 3px 8px; border-radius: 6px; font-weight: 700; margin-left: 5px; }
+        .tag { font-size: 0.7rem; background: #efeffc; color: var(--primary); padding: 3px 8px; border-radius: 6px; font-weight: 700; margin-left: 5px; }
         
-        /* UI 继承自 V20 的完美布局 */
         .input-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
         input[type="text"] { flex: 1 1 100%; min-width: 200px; padding: 12px; border: 1px solid #e5e5ea; border-radius: 10px; font-family: monospace; outline: none; }
         .btn-row { display: flex; gap: 8px; flex: 1 1 auto; }
@@ -29,7 +28,8 @@
 
         #status { font-size: 0.9rem; color: #636366; text-align: center; margin-bottom: 20px; padding: 10px; background: #f2f2f7; border-radius: 10px; }
         
-        .file-box { border: 2px dashed #c7c7cc; padding: 40px 20px; text-align: center; border-radius: 12px; cursor: pointer; background: #fff; }
+        .file-box { border: 2px dashed #c7c7cc; padding: 40px 20px; text-align: center; border-radius: 12px; cursor: pointer; background: #fff; transition: 0.2s;}
+        .file-box:active { background: #f0f0f0; border-color: var(--primary); }
         
         .progress-wrap { margin-top: 20px; display: none; }
         .progress-bar { height: 8px; background: #e5e5ea; border-radius: 4px; overflow: hidden; }
@@ -38,7 +38,7 @@
 
         .log-item { padding: 15px 0; border-bottom: 1px solid #e5e5ea; }
         .media-preview { width: 100%; max-height: 300px; border-radius: 8px; background: #000; margin-top: 10px; object-fit: contain; }
-        .btn-dl { font-size: 0.85rem; color: var(--primary); text-decoration: none; padding: 6px 12px; background: #fff0f5; border-radius: 8px; display: inline-block; margin-top: 8px; font-weight: bold;}
+        .btn-dl { font-size: 0.85rem; color: var(--primary); text-decoration: none; padding: 6px 12px; background: #efeffc; border-radius: 8px; display: inline-block; margin-top: 8px; font-weight: bold;}
 
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter: blur(5px); justify-content:center; align-items:center; z-index:999; flex-direction: column; }
         #qrcode-gen { background: white; padding: 20px; border-radius: 20px; }
@@ -48,8 +48,8 @@
 </head>
 <body>
     <div class="card">
-        <h3>V21 自动重传版 <span class="tag">ARQ</span></h3>
-        <div style="font-size:0.85rem; color:#8e8e93; margin-bottom:15px">丢包自动修复 • 弱网环境增强</div>
+        <h3>V22 连续传输版 <span class="tag">Multi-File</span></h3>
+        <div style="font-size:0.85rem; color:#8e8e93; margin-bottom:15px">状态自动重置 • 传完一个再传一个</div>
         
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="输入32位凭证" maxlength="32">
@@ -67,8 +67,8 @@
             <div class="file-box" onclick="document.getElementById('fileInput').click()">
                 <div style="font-size:2.5rem; margin-bottom:10px">📤</div>
                 <div style="font-weight:600">点击发送文件</div>
-                <div style="font-size:0.85rem; color:#8e8e93; margin-top:5px">支持 500MB+ 断点补传</div>
-                <input type="file" id="fileInput" style="display:none">
+                <div style="font-size:0.85rem; color:#8e8e93; margin-top:5px">无需刷新，支持连续发送</div>
+                <input type="file" id="fileInput" style="display:none" onclick="this.value=null">
             </div>
             
             <div class="progress-wrap" id="prog-box">
@@ -94,7 +94,7 @@
         const CONFIG = {
             pbkdf2: { name: "PBKDF2", hash: "SHA-256", iterations: 500000 },
             aes: { name: "AES-GCM", length: 256 },
-            salt_room: "V21_ARQ_ROOM", salt_key: "V21_ARQ_KEY"
+            salt_room: "V22_MULTI_ROOM", salt_key: "V22_MULTI_KEY"
         };
 
         const SecurityCore = {
@@ -121,16 +121,23 @@
         };
 
         let peer, conn;
-        // 接收状态
-        let incoming = { chunks: [], meta: null, receivedCount: 0, totalChunks: 0 };
-        // 发送状态 (用于重传时读取文件)
-        let sendingFile = null; 
+        // --- V22 核心变量 ---
+        let incoming = null; // 接收状态对象
+        let sendingFile = null; // 发送文件引用
         let isBusy = false;
+
+        // --- V22 新增：状态重置函数 ---
+        function resetTransferState() {
+            incoming = { chunks: [], meta: null, receivedCount: 0, totalChunks: 0 };
+            isBusy = false;
+            // 不清空 sendingFile，因为可能需要重传，直到下一轮开始才覆盖
+            updateBar(0, 0, 0, "准备中");
+        }
 
         async function initApp() {
             const code = document.getElementById('credentialInput').value.trim();
             if(code.length !== 32) return alert("凭证需32位");
-            setStatus("🔐 加密握手中...");
+            setStatus("🔐 连接中...");
             setTimeout(async () => {
                 try {
                     const roomId = await SecurityCore.init(code);
@@ -147,7 +154,7 @@
                     { urls: 'stun:stun.miwifi.com' }, { urls: 'stun:stun.chat.bilibili.com' }, { urls: 'stun:stun.qq.com' }
                 ]}
             });
-            peer.on('open', () => { setStatus("✅ 节点就绪 (ARQ)"); peer.on('connection', setupConn); });
+            peer.on('open', () => { setStatus("✅ 就绪"); peer.on('connection', setupConn); });
             peer.on('error', e => {
                 if(e.type === 'unavailable-id') {
                     setStatus("🔗 连接房主...");
@@ -168,45 +175,45 @@
         document.getElementById('fileInput').addEventListener('change', async e => {
             const file = e.target.files[0];
             if(!file || !conn) return;
-            if(isBusy) return alert("忙碌中");
             
+            // 🔥 V22 修复：开始新任务前，强制重置状态
+            if(isBusy) {
+                if(!confirm("当前正在传输，确定要中断并开始新文件吗？")) return;
+            }
+            resetTransferState();
             isBusy = true;
-            sendingFile = file; // 保存引用以便重传
-            document.getElementById('prog-box').style.display = 'block';
+            sendingFile = file; 
             
+            document.getElementById('prog-box').style.display = 'block';
             const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            
+            // 发送新文件的元数据
             conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type, total: totalChunks });
             
-            // 首次全量发送
             sendChunksRange(0, totalChunks - 1, totalChunks);
         });
 
-        // 通用发送函数 (支持全量发送 和 补发特定列表)
         async function sendChunksRange(start, end, total, specificList = null) {
             const file = sendingFile;
             let list = specificList;
-            
-            // 如果没有指定列表，就生成从 start 到 end 的序列
-            if(!list) {
-                list = [];
-                for(let i=start; i<=end; i++) list.push(i);
-            }
+            if(!list) { list = []; for(let i=start; i<=end; i++) list.push(i); }
 
             const reader = new FileReader();
             let idx = 0;
 
             const sendNext = async () => {
                 if(idx >= list.length) {
-                    // 本轮发送结束
                     if(!specificList) {
-                        conn.send({ type: 'end' }); // 首次发送完毕，发信号
-                        setStatus("⏳ 等待接收方确认...");
+                        conn.send({ type: 'end' }); 
+                        setStatus("⏳ 等待确认...");
                     } else {
-                        conn.send({ type: 'retry-end' }); // 补发完毕
-                        setStatus("🔄 补发完成，等待校验...");
+                        conn.send({ type: 'retry-end' }); 
+                        setStatus("🔄 补发完毕");
                     }
                     return;
                 }
+                // 如果用户中途换了文件，停止旧任务
+                if(file !== sendingFile) return;
 
                 const seq = list[idx];
                 const offset = seq * CHUNK_SIZE;
@@ -216,62 +223,65 @@
                     if(!conn || !conn.open) return;
                     const encrypted = await SecurityCore.encrypt(evt.target.result);
                     conn.send({ type: 'chunk', seq: seq, payload: encrypted });
-                    
                     idx++;
-                    // 仅在首次发送时更新大进度条
                     if(!specificList) {
                         const percent = Math.min(100, Math.round((seq / total) * 100));
                         updateBar(percent, seq * CHUNK_SIZE, file.size, "发送中");
                     }
-                    setTimeout(sendNext, 0); // 避免卡顿
+                    setTimeout(sendNext, 0); 
                 };
                 reader.readAsArrayBuffer(slice);
             };
             sendNext();
         }
 
-        // --- 接收与ARQ逻辑 ---
+        // --- 接收逻辑 ---
         async function handleData(data) {
-            // 1. 元数据
+            // 🔥 V22 修复：收到 meta 信号，意味着新文件来了，强制重置接收状态
             if (data.type === 'meta') {
-                incoming = { chunks: new Array(data.total), meta: data, receivedCount: 0, receivedBytes: 0, totalChunks: data.total };
+                resetTransferState(); // 清空之前的缓存
                 isBusy = true;
+                
+                incoming = { 
+                    chunks: new Array(data.total), 
+                    meta: data, 
+                    receivedCount: 0, 
+                    totalChunks: data.total 
+                };
+                
                 document.getElementById('prog-box').style.display = 'block';
                 setStatus(`⬇ 接收: ${data.name}`);
                 return;
             }
 
-            // 2. 数据分片
             if (data.type === 'chunk' && isBusy) {
                 try {
-                    // 如果该分片还没收过 (避免重复解密)
                     if(!incoming.chunks[data.seq]) {
                         const decrypted = await SecurityCore.decrypt(data.payload);
                         incoming.chunks[data.seq] = decrypted;
                         incoming.receivedCount++;
-                        incoming.receivedBytes += decrypted.byteLength;
                         
+                        // 进度计算优化
                         const percent = Math.min(100, Math.round((incoming.receivedCount / incoming.totalChunks) * 100));
-                        updateBar(percent, incoming.receivedBytes, incoming.meta.size, "接收中");
+                        // 估算已接收大小
+                        const currBytes = incoming.receivedCount * CHUNK_SIZE; 
+                        updateBar(percent, Math.min(currBytes, incoming.meta.size), incoming.meta.size, "接收中");
                     }
                 } catch(e) {}
                 return;
             }
 
-            // 3. 结束信号 (首次或补发)
             if ((data.type === 'end' || data.type === 'retry-end') && isBusy) {
                 checkIntegrityAndRetry();
                 return;
             }
 
-            // 4. 发送方收到重传请求
             if (data.type === 'retry-req') {
-                setStatus(`⚠️ 对方请求补发 ${data.list.length} 个分片...`);
-                sendChunksRange(0, 0, 0, data.list); // 调用补发逻辑
+                setStatus(`⚠️ 补发 ${data.list.length} 个分片...`);
+                sendChunksRange(0, 0, 0, data.list);
             }
         }
 
-        // 核心：完整性检查与重传请求
         function checkIntegrityAndRetry() {
             let missingList = [];
             for(let i=0; i<incoming.totalChunks; i++) {
@@ -279,8 +289,7 @@
             }
 
             if(missingList.length > 0) {
-                setStatus(`⚠️ 发现 ${missingList.length} 个丢包，请求补发...`);
-                // 发送重传请求
+                setStatus(`⚠️ 丢包 ${missingList.length} 个，请求补发...`);
                 conn.send({ type: 'retry-req', list: missingList });
             } else {
                 finishReceive();
@@ -298,16 +307,17 @@
             const url = URL.createObjectURL(blob);
             addHistory(incoming.meta.name, "⬇ 收到", formatSize(incoming.meta.size), url, mime);
             
+            // 🔥 V22 修复：完成后重置状态，但保留 isBusy=false 以允许新传输
+            incoming.chunks = []; // 释放大内存
             isBusy = false;
-            incoming.chunks = []; // 释放内存
-            setStatus("✅ 接收完成 (100% 完整)");
+            setStatus("✅ 接收完成");
         }
 
         // --- UI 工具 ---
         function updateBar(p, curr, total, txt) {
             document.getElementById('p-fill').style.width = p + '%';
             document.getElementById('p-txt').innerText = `${txt} ${p}%`;
-            document.getElementById('p-detail').innerText = `${formatSize(curr)}/${formatSize(total)}`;
+            document.getElementById('p-detail').innerText = total ? `${formatSize(curr)}/${formatSize(total)}` : '';
         }
 
         function addHistory(name, type, size, url, mime) {
@@ -320,7 +330,7 @@
                 else if (mime && mime.startsWith('image/')) preview = `<img src="${url}" class="media-preview">`;
             }
 
-            const color = type.includes('发送') ? '#007aff' : '#34c759';
+            const color = type.includes('发送') ? '#5856d6' : '#34c759';
             const html = `
                 <div class="log-item">
                     <div style="font-weight:600; color:${color}; margin-bottom:4px;">${type} <span style="font-weight:normal;color:#8e8e93;font-size:0.8em">(${size})</span></div>
