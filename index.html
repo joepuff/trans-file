@@ -3,38 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>局域网互传 V28 [握手校验]</title>
+    <title>局域网互传 V30 [紧凑布局]</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         :root { --primary: #007aff; --success: #34c759; --error: #ff3b30; --bg: #f5f5f7; --card: #fff; }
-        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: var(--bg); color: #1c1c1e; }
-        .card { background: var(--card); padding: 24px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 16px; background: var(--bg); color: #1c1c1e; }
+        .card { background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 16px; }
         
-        .input-group { display: flex; gap: 8px; margin-bottom: 20px; }
-        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #e5e5ea; border-radius: 10px; font-family: monospace; letter-spacing: 2px; text-align: center; }
-        button { border: none; padding: 0 16px; border-radius: 10px; font-weight: 600; cursor: pointer; background: #e5e5ea; font-size: 0.9rem; }
+        .input-group { display: flex; gap: 6px; margin-bottom: 16px; }
+        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #e5e5ea; border-radius: 8px; font-family: monospace; letter-spacing: 2px; text-align: center; font-size: 0.9rem; }
+        button { border: none; padding: 0 14px; border-radius: 8px; font-weight: 600; cursor: pointer; background: #e5e5ea; font-size: 0.85rem; }
         .btn-main { background: var(--primary); color: white; }
 
-        .grid-100 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; margin: 20px 0; }
-        .grid-item { aspect-ratio: 1; background: #e5e5ea; border-radius: 3px; font-size: 0; transition: 0.2s; }
+        /* 🔥 V30 核心修改：25列 x 4行 = 100格 */
+        .grid-compact { 
+            display: grid; 
+            grid-template-columns: repeat(25, 1fr); /* 一行25个 */
+            gap: 1px; /* 极窄间隙，看起来像条纹 */
+            margin: 15px 0; 
+            background: #f0f0f0;
+            padding: 2px;
+            border-radius: 4px;
+        }
+        .grid-item { 
+            aspect-ratio: 1; /* 保持正方形 */
+            background: #d1d1d6; 
+            border-radius: 1px; 
+            font-size: 0; 
+            transition: 0.1s; 
+        }
         .grid-item.done { background: var(--success); }
-        .grid-item.sending { background: var(--primary); opacity: 0.8; }
+        .grid-item.sending { background: var(--primary); }
         .grid-item.error { background: var(--error); }
 
-        .drop-zone { border: 2px dashed #c7c7cc; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; margin-top: 20px; opacity: 0.5; pointer-events: none; transition: 0.3s; }
-        .drop-zone.ready { opacity: 1; pointer-events: all; border-color: var(--primary); }
+        .drop-zone { 
+            border: 2px dashed #c7c7cc; padding: 20px; text-align: center; border-radius: 12px; 
+            margin-top: 15px; transition: 0.3s; 
+            opacity: 0.5; pointer-events: none; cursor: not-allowed;
+            background: #fafafa;
+        }
+        .drop-zone.active { opacity: 1; pointer-events: all; border-color: var(--primary); background: #fff; cursor: pointer; }
+        .drop-zone.active:active { background: #f0f7ff; }
         
-        .log-item { padding: 10px 0; border-bottom: 1px solid #eee; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; }
+        .log-item { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 99; }
         #qrcode-gen { background: white; padding: 20px; border-radius: 16px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h3>V28 握手校验版 <span style="font-size:0.8rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">Secure</span></h3>
-        <div style="color:#8e8e93; font-size:0.8rem; margin-bottom:15px">连接时比对密钥 • 严防解密失败</div>
+        <h3>V30 紧凑版 <span style="font-size:0.75rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">Compact</span></h3>
+        <div style="color:#8e8e93; font-size:0.75rem; margin-bottom:12px">100段 (25x4) • 握手校验 • 零丢包</div>
 
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="输入32位密钥" maxlength="32">
@@ -45,22 +66,22 @@
             <button onclick="App.scanQR()">📷</button>
             <button class="btn-main" style="flex:2" onclick="App.init()">🚀 连接</button>
         </div>
-        <div id="status" style="text-align:center; color:#666; font-size:0.9rem;">等待连接...</div>
+        <div id="status" style="text-align:center; color:#666; font-size:0.85rem;">等待连接...</div>
 
         <div id="panel" style="display:none">
-            <div class="grid-100" id="statusGrid"></div>
-            <div id="progress-text" style="text-align:center; font-size:0.8rem; color:#8e8e93; margin-bottom:10px;">请先等待密钥校验通过...</div>
+            <div class="grid-compact" id="statusGrid"></div>
+            <div id="progress-text" style="text-align:center; font-size:0.75rem; color:#8e8e93; margin-bottom:10px;">等待校验...</div>
 
-            <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-                <div style="font-size:2rem">📦</div>
-                <div>点击选择文件 (100段)</div>
-                <input type="file" id="fileInput" style="display:none">
+            <div class="drop-zone" id="dropZone">
+                <div style="font-size:1.5rem">📄</div>
+                <div id="dropText" style="font-size:0.9rem">等待握手...</div>
             </div>
+            <input type="file" id="fileInput" style="display:none">
         </div>
     </div>
 
     <div class="card">
-        <h4>传输记录</h4>
+        <h4 style="font-size:0.9rem; margin:0 0 10px 0">传输记录</h4>
         <div id="history"></div>
     </div>
 
@@ -71,73 +92,57 @@
         const CONFIG = {
             CHUNK_SIZE: 16 * 1024, 
             TOTAL_PARTS: 100, 
-            SALT: "V28_HANDSHAKE_SALT"
+            SALT: "V30_COMPACT_SALT"
         };
 
         const MultiCrypto = {
-            subKeys: [],
-            keyHash: null, // 用于握手比对
-
+            subKeys: [], keyHash: null,
             async init(mainKey) {
                 if(mainKey.length !== 32) throw new Error("Key len != 32");
                 this.subKeys = [];
                 const enc = new TextEncoder();
-                
-                // 1. 生成16组AES密钥
                 for(let i=0; i<16; i++) {
                     const subSeed = mainKey.substr(i*2, 2);
                     const keyMat = await crypto.subtle.importKey("raw", enc.encode(subSeed + CONFIG.SALT), {name:"PBKDF2"}, false, ["deriveKey"]);
                     const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(i.toString()), iterations: 5000, hash: "SHA-256" }, keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
                     this.subKeys.push(key);
                 }
-                
-                // 2. 生成主密钥指纹（用于握手校验）
-                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_CHECK"));
-                this.keyHash = Array.from(new Uint8Array(fingerprint)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 8); // 取前8位做校验
-
-                // 3. 生成RoomID
+                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_V30"));
+                this.keyHash = Array.from(new Uint8Array(fingerprint)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 8);
                 const hash = await crypto.subtle.digest('SHA-256', enc.encode(mainKey));
                 return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 32);
             },
-            
             async encrypt(partIndex, chunkData) {
-                const keyIndex = partIndex % 16; 
                 const iv = crypto.getRandomValues(new Uint8Array(12));
-                const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.subKeys[keyIndex], chunkData);
+                const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.subKeys[partIndex%16], chunkData);
                 const packed = new Uint8Array(12 + cipher.byteLength);
                 packed.set(iv, 0); packed.set(new Uint8Array(cipher), 12);
                 return packed;
             },
-            
             async decrypt(partIndex, packedData) {
-                const keyIndex = partIndex % 16;
                 const iv = packedData.slice(0, 12);
                 const cipher = packedData.slice(12);
-                return await crypto.subtle.decrypt({name:"AES-GCM", iv}, this.subKeys[keyIndex], cipher);
+                return await crypto.subtle.decrypt({name:"AES-GCM", iv}, this.subKeys[partIndex%16], cipher);
             }
         };
 
         const App = {
-            peer: null, conn: null,
-            isVerified: false, // 是否通过握手
+            peer: null, conn: null, isVerified: false,
             state: { file: null, parts: [], meta: null, partCounts: new Array(CONFIG.TOTAL_PARTS).fill(0), hasError: false },
 
             async init() {
                 const input = document.getElementById('credentialInput').value.trim();
                 if(input.length !== 32) return UI.setStatus("❌ 密钥长度错误");
-                UI.setStatus("🔐 计算密钥指纹...");
+                UI.setStatus("🔐 计算密钥...");
                 try {
                     const roomId = await MultiCrypto.init(input);
                     this.startPeer(roomId);
-                } catch(e) { UI.setStatus("❌ 密钥初始化失败"); }
+                } catch(e) { UI.setStatus("❌ 密钥无效"); }
             },
 
             startPeer(id) {
                 if(this.peer) this.peer.destroy();
-                this.peer = new Peer(id, {
-                    host: '0.peerjs.com', port: 443, secure: true,
-                    config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }] }
-                });
+                this.peer = new Peer(id, { host: '0.peerjs.com', port: 443, secure: true, config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }] } });
                 this.peer.on('open', () => { UI.setStatus("✅ 就绪 (Host)"); this.peer.on('connection', c => this.setupConn(c)); });
                 this.peer.on('error', e => { if(e.type==='unavailable-id'){ UI.setStatus("🔗 连接 Host..."); const g=new Peer(); g.on('open',()=>this.setupConn(g.connect(id))); } });
             },
@@ -145,35 +150,28 @@
             setupConn(c) {
                 this.conn = c;
                 c.on('open', () => {
-                    UI.setStatus("🤝 已连接，正在握手校验..."); 
+                    UI.setStatus("🤝 已连接，校验中..."); 
                     document.getElementById('panel').style.display='block'; 
                     UI.renderGrid();
-                    // 🔥 连接建立后，立即发送握手包
                     c.send({ type: 'handshake', hash: MultiCrypto.keyHash });
                 });
                 c.on('data', d => this.handleData(d));
-                c.on('close', () => { UI.setStatus("🔌 断开"); this.isVerified = false; UI.toggleDrop(false); });
+                c.on('close', () => { UI.setStatus("🔌 断开"); this.isVerified=false; UI.toggleDrop(false); });
             },
 
             async sendFile(file) {
-                if(!this.isVerified) return alert("密钥未通过校验，禁止发送！");
+                if(!this.isVerified) return;
                 this.state.file = file;
                 UI.resetGrid();
                 const partSize = Math.ceil(file.size / CONFIG.TOTAL_PARTS);
                 this.conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type });
-                
-                UI.setProgress(`准备发送: ${file.name}`);
+                UI.setProgress(`正在发送: ${file.name}`);
 
                 for(let i=0; i < CONFIG.TOTAL_PARTS; i++) {
                     UI.setGrid(i, 'sending');
                     const start = i * partSize;
                     const end = Math.min(start + partSize, file.size);
-                    
-                    if(start >= file.size) {
-                        this.conn.send({ type: 'part-end', p: i, count: 0 }); 
-                        UI.setGrid(i, 'done');
-                        continue;
-                    }
+                    if(start >= file.size) { this.conn.send({ type: 'part-end', p: i, count: 0 }); UI.setGrid(i, 'done'); continue; }
 
                     const partBlob = file.slice(start, end);
                     await this.sendPart(i, partBlob);
@@ -186,42 +184,27 @@
             async sendPart(p, blob) {
                 const buffer = await blob.arrayBuffer();
                 const totalChunks = Math.ceil(buffer.byteLength / CONFIG.CHUNK_SIZE);
-                
                 for(let j=0; j<totalChunks; j++) {
-                    // 🔥 零缓冲流控：只要缓冲区有数据就等，确保绝对不丢包
-                    while (this.conn.dataChannel.bufferedAmount > 0) {
-                        await new Promise(r => setTimeout(r, 2));
-                    }
-
+                    while (this.conn.dataChannel.bufferedAmount > 0) await new Promise(r => setTimeout(r, 1));
                     const chunkOffset = j * CONFIG.CHUNK_SIZE;
                     const chunkData = buffer.slice(chunkOffset, chunkOffset + CONFIG.CHUNK_SIZE);
                     const encrypted = await MultiCrypto.encrypt(p, chunkData);
-                    
                     this.conn.send({ type: 'data', p: p, c: j, d: encrypted });
                 }
                 this.conn.send({ type: 'part-end', p: p, count: totalChunks });
             },
 
             async handleData(data) {
-                // 🔥 1. 握手校验逻辑
                 if(data.type === 'handshake') {
                     if(data.hash === MultiCrypto.keyHash) {
                         this.isVerified = true;
-                        UI.setStatus("✅ 密钥校验通过，通道安全");
+                        UI.setStatus("✅ 安全通道已建立");
                         UI.toggleDrop(true);
-                        // 如果我是接收方，也回发一个握手，确保双向认证
-                        if(this.peer.id !== this.conn.peer) { // 简单判断避免死循环，实际P2P不用太严格
-                             // 实际上一条消息已经通了，这里只是更新UI状态
-                        }
                     } else {
-                        UI.setStatus("❌ 严重错误：双方密钥不一致！");
-                        alert("双方密钥不一致！\n请检查32位凭证是否完全相同。\n无法进行加密通信。");
-                        this.conn.close();
+                        UI.setStatus("❌ 密钥不一致"); alert("密钥不匹配"); this.conn.close();
                     }
                     return;
                 }
-
-                // 2. 正常数据逻辑 (只有验证通过才处理)
                 if(!this.isVerified) return;
 
                 if(data.type === 'meta') {
@@ -230,10 +213,9 @@
                     this.state.partCounts = new Array(CONFIG.TOTAL_PARTS).fill(0);
                     this.state.hasError = false;
                     UI.resetGrid();
-                    UI.setProgress(`⬇ 开始接收 (100段)`);
+                    UI.setProgress(`⬇ 正在接收...`);
                     return;
                 }
-
                 if(data.type === 'data') {
                     const { p, c, d } = data;
                     if(this.state.hasError) return;
@@ -242,55 +224,29 @@
                         const decrypted = await MultiCrypto.decrypt(p, d);
                         this.state.parts[p][c] = decrypted;
                         this.state.partCounts[p]++;
-                    } catch(e) { 
-                        // 🔥 捕获解密错误
-                        console.error(e);
-                        UI.setGrid(p, 'error');
-                        UI.setProgress(`❌ 错误：第${p+1}段解密失败`);
-                        this.state.hasError = true;
-                    }
+                    } catch(e) { UI.setGrid(p, 'error'); this.state.hasError = true; }
                     return;
                 }
-
                 if(data.type === 'part-end') {
                     const { p, count } = data;
-                    const received = this.state.partCounts[p];
-                    
-                    if (received !== count) {
-                        UI.setGrid(p, 'error');
-                        UI.setProgress(`❌ 丢包：第${p+1}段 (收${received}/应${count})`);
-                        this.state.hasError = true;
-                        return;
-                    }
-
-                    if(this.state.parts[p].length > 0) {
-                         // 检查空洞
-                        for(let k=0; k<count; k++) if(!this.state.parts[p][k]) {
-                            UI.setGrid(p, 'error'); this.state.hasError = true; return;
-                        }
-                        this.state.parts[p] = new Blob(this.state.parts[p]); 
-                    }
+                    if (this.state.partCounts[p] !== count) { UI.setGrid(p, 'error'); this.state.hasError = true; return; }
+                    if(this.state.parts[p].length > 0) this.state.parts[p] = new Blob(this.state.parts[p]);
                     UI.setGrid(p, 'done');
                 }
-
                 if(data.type === 'all-done') {
                     if(!this.state.hasError) this.assembleFile();
-                    else UI.setProgress("❌ 传输因错误终止");
+                    else UI.setProgress("❌ 传输错误");
                 }
             },
 
             assembleFile() {
                 try {
                     const meta = this.state.meta;
-                    const validParts = this.state.parts.map(p => {
-                        if(p instanceof Blob) return p;
-                        if(Array.isArray(p) && p.length===0) return new Blob([]);
-                        throw new Error("Missing");
-                    });
+                    const validParts = this.state.parts.map(p => { if(p instanceof Blob) return p; if(Array.isArray(p)&&p.length===0) return new Blob([]); throw new Error(); });
                     const finalBlob = new Blob(validParts, { type: meta.mime });
                     const url = URL.createObjectURL(finalBlob);
                     UI.addHistory(meta.name, meta.size, url);
-                    UI.setProgress("✅ 校验完整，合并成功");
+                    UI.setProgress("✅ 传输成功");
                     this.state.parts = []; 
                 } catch(e) { UI.setProgress("❌ 合并失败"); }
             },
@@ -305,14 +261,12 @@
             setProgress: s => document.getElementById('progress-text').innerText = s,
             toggleDrop: (enable) => {
                 const el = document.getElementById('dropZone');
-                if(enable) { el.classList.add('ready'); el.innerHTML = `<div style="font-size:2rem">📦</div><div>点击选择文件 (安全传输)</div><input type="file" id="fileInput" style="display:none">`; }
-                else { el.classList.remove('ready'); }
+                const txt = document.getElementById('dropText');
+                if(enable) { el.classList.add('active'); txt.innerText = "点击选择文件"; }
+                else { el.classList.remove('active'); txt.innerText = "等待握手..."; }
             },
-            renderGrid: () => {
-                const box = document.getElementById('statusGrid'); box.innerHTML = '';
-                for(let i=0; i<CONFIG.TOTAL_PARTS; i++) { const d = document.createElement('div'); d.className = 'grid-item'; d.id = `b-${i}`; box.appendChild(d); }
-            },
-            resetGrid: () => { for(let i=0;i<CONFIG.TOTAL_PARTS;i++) document.getElementById(`b-${i}`).className = 'grid-item'; },
+            renderGrid: () => { const box=document.getElementById('statusGrid'); box.innerHTML=''; for(let i=0;i<CONFIG.TOTAL_PARTS;i++){ const d=document.createElement('div'); d.className='grid-item'; d.id=`b-${i}`; box.appendChild(d); } },
+            resetGrid: () => { for(let i=0;i<CONFIG.TOTAL_PARTS;i++) document.getElementById(`b-${i}`).className='grid-item'; },
             setGrid: (idx, status) => { document.getElementById(`b-${idx}`).className = `grid-item ${status}`; },
             addHistory: (name, size, url) => {
                 const div = document.getElementById('history');
@@ -321,8 +275,8 @@
             }
         };
 
-        document.getElementById('dropZone').addEventListener('click', e => { if(e.currentTarget.classList.contains('ready')) document.getElementById('fileInput').click(); });
-        document.getElementById('dropZone').addEventListener('change', e => { if(e.target.files[0]) App.sendFile(e.target.files[0]); }, true); // capture phase
+        document.getElementById('dropZone').onclick = () => { if(document.getElementById('dropZone').classList.contains('active')) document.getElementById('fileInput').click(); };
+        document.getElementById('fileInput').onchange = (e) => { if(e.target.files[0]) { App.sendFile(e.target.files[0]); e.target.value = null; } };
         window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value=location.hash.split('c=')[1]; setTimeout(()=>App.init(),600); } };
     </script>
 </body>
