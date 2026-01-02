@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>局域网互传 V25 [16段分治版]</title>
+    <title>局域网互传 V26 [完整性校验版]</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
-        :root { --primary: #5856d6; --success: #34c759; --bg: #f2f2f7; --card: #fff; }
+        :root { --primary: #5856d6; --success: #34c759; --error: #ff3b30; --bg: #f2f2f7; --card: #fff; }
         body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: var(--bg); color: #1c1c1e; }
         .card { background: var(--card); padding: 24px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
         
@@ -17,17 +17,18 @@
         button { border: none; padding: 0 20px; border-radius: 10px; font-weight: 600; cursor: pointer; background: #e5e5ea; }
         .btn-main { background: var(--primary); color: white; }
 
-        /* 16宫格状态显示 */
-        .grid-16 { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin: 20px 0; }
-        .grid-item { aspect-ratio: 1; background: #e5e5ea; border-radius: 4px; font-size: 0; transition: 0.3s; position: relative; }
-        .grid-item.done { background: var(--success); }
+        .grid-16 { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin: 20px 0; }
+        .grid-item { aspect-ratio: 1; background: #e5e5ea; border-radius: 6px; font-size: 0.6rem; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; transition: 0.3s; }
+        
+        .grid-item.done { background: var(--success); box-shadow: 0 0 5px var(--success); }
         .grid-item.sending { background: var(--primary); animation: pulse 1s infinite; }
-        .grid-item.error { background: #ff3b30; }
+        .grid-item.error { background: var(--error); animation: shake 0.3s; }
         
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        @keyframes shake { 0% { transform: translate(1px, 1px); } 50% { transform: translate(-1px, -1px); } 100% { transform: translate(1px, 1px); } }
 
         .drop-zone { border: 2px dashed #c7c7cc; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; margin-top: 20px; }
-        .log-item { padding: 10px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; display: flex; justify-content: space-between; }
+        .log-item { padding: 10px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
         
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 99; }
         #qrcode-gen { background: white; padding: 20px; border-radius: 16px; }
@@ -35,29 +36,29 @@
 </head>
 <body>
     <div class="card">
-        <h3>V25 分段隔离传输 <span style="font-size:0.8rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">Stable</span></h3>
-        <div style="color:#8e8e93; font-size:0.8rem; margin-bottom:15px">16组密钥独立加密 • 背压流控防丢包</div>
+        <h3>V26 完整性校验 <span style="font-size:0.8rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">Integrity</span></h3>
+        <div style="color:#8e8e93; font-size:0.8rem; margin-bottom:15px">严格校验分片数量 • 杜绝绿灯文件损坏</div>
 
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="输入32位主密钥" maxlength="32">
         </div>
         <div class="input-group">
-            <button onclick="App.genKey()">🎲 生成</button>
-            <button onclick="App.showQR()">📱 二维码</button>
-            <button onclick="App.scanQR()">📷 扫码</button>
+            <button onclick="App.genKey()">🎲</button>
+            <button onclick="App.showQR()">📱</button>
+            <button onclick="App.scanQR()">📷</button>
             <button class="btn-main" style="flex:2" onclick="App.init()">🚀 连接</button>
         </div>
         <div id="status" style="text-align:center; color:#666; font-size:0.9rem;">等待连接...</div>
 
         <div id="panel" style="display:none">
             <div class="grid-16" id="statusGrid">
-                <script>for(let i=0;i<16;i++)document.write(`<div class="grid-item" id="b-${i}" title="Part ${i}"></div>`)</script>
+                <script>for(let i=0;i<16;i++)document.write(`<div class="grid-item" id="b-${i}">${i+1}</div>`)</script>
             </div>
             <div id="progress-text" style="text-align:center; font-size:0.8rem; color:#8e8e93; margin-bottom:10px;">就绪</div>
 
             <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
                 <div style="font-size:2rem">📦</div>
-                <div>点击选择文件 (强制切分16段)</div>
+                <div>点击选择文件</div>
                 <input type="file" id="fileInput" style="display:none">
             </div>
         </div>
@@ -72,70 +73,53 @@
     <div id="scan-modal" class="modal"><div style="background:white;padding:10px;border-radius:10px"><div id="reader" style="width:300px"></div><button onclick="App.stopScan()" style="width:100%;margin-top:10px;padding:10px">关闭</button></div></div>
 
     <script>
-        // --- 核心配置 ---
         const CONFIG = {
-            CHUNK_SIZE: 16 * 1024, // 降低到 16KB 以配合 WebRTC 最佳 MTU
-            TOTAL_PARTS: 16,
-            SALT: "V25_ISOLATION"
+            CHUNK_SIZE: 16 * 1024, 
+            SALT: "V26_INTEGRITY_SALT"
         };
 
-        // --- 多密钥安全核心 ---
         const MultiCrypto = {
-            subKeys: [], // 存储16个AES密钥
-            
-            // 初始化：将32字符拆分为16组，每组2字符作为种子派生独立密钥
+            subKeys: [],
             async init(mainKey) {
-                if(mainKey.length !== 32) throw new Error("Key length must be 32");
+                if(mainKey.length !== 32) throw new Error("Key len != 32");
                 this.subKeys = [];
                 const enc = new TextEncoder();
-                
                 for(let i=0; i<16; i++) {
-                    const subSeed = mainKey.substr(i*2, 2); // 提取2位
+                    const subSeed = mainKey.substr(i*2, 2);
                     const keyMat = await crypto.subtle.importKey("raw", enc.encode(subSeed + CONFIG.SALT), {name:"PBKDF2"}, false, ["deriveKey"]);
-                    const key = await crypto.subtle.deriveKey(
-                        { name: "PBKDF2", salt: enc.encode(i.toString()), iterations: 10000, hash: "SHA-256" },
-                        keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
-                    );
+                    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(i.toString()), iterations: 5000, hash: "SHA-256" }, keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
                     this.subKeys.push(key);
                 }
-                
-                // 房间ID由主密钥哈希生成
                 const hash = await crypto.subtle.digest('SHA-256', enc.encode(mainKey));
                 return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 32);
             },
-
             async encrypt(partIndex, chunkData) {
                 const iv = crypto.getRandomValues(new Uint8Array(12));
-                const key = this.subKeys[partIndex]; // 使用对应段的密钥
-                const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, chunkData);
+                const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.subKeys[partIndex], chunkData);
                 const packed = new Uint8Array(12 + cipher.byteLength);
                 packed.set(iv, 0); packed.set(new Uint8Array(cipher), 12);
                 return packed;
             },
-
             async decrypt(partIndex, packedData) {
                 const iv = packedData.slice(0, 12);
                 const cipher = packedData.slice(12);
-                const key = this.subKeys[partIndex];
-                return await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, cipher);
+                return await crypto.subtle.decrypt({name:"AES-GCM", iv}, this.subKeys[partIndex], cipher);
             }
         };
 
-        // --- 应用逻辑 ---
         const App = {
             peer: null, conn: null,
             state: { 
-                file: null, 
-                parts: [], // 接收端存储16个部分的Buffer
-                meta: null,
-                activePart: -1 
+                file: null, parts: [], meta: null, 
+                // 🔥 新增：计数器，用于完整性校验
+                partCounts: new Array(16).fill(0), 
+                hasError: false 
             },
 
             async init() {
                 const input = document.getElementById('credentialInput').value.trim();
-                if(input.length !== 32) return UI.setStatus("❌ 必须输入32位密钥 (16组x2位)");
-                
-                UI.setStatus("🔐 正在生成16组独立密钥...");
+                if(input.length !== 32) return UI.setStatus("❌ 必须输入32位密钥");
+                UI.setStatus("🔐 生成密钥中...");
                 try {
                     const roomId = await MultiCrypto.init(input);
                     this.startPeer(roomId);
@@ -148,103 +132,69 @@
                     host: '0.peerjs.com', port: 443, secure: true,
                     config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }] }
                 });
-                this.peer.on('open', () => {
-                    UI.setStatus("✅ 节点就绪 (Host)");
-                    this.peer.on('connection', c => this.setupConn(c));
-                });
-                this.peer.on('error', err => {
-                    if(err.type === 'unavailable-id') {
-                        UI.setStatus("🔗 连接 Host...");
-                        const guest = new Peer();
-                        guest.on('open', () => this.setupConn(guest.connect(id)));
-                    }
-                });
+                this.peer.on('open', () => { UI.setStatus("✅ 就绪 (Host)"); this.peer.on('connection', c => this.setupConn(c)); });
+                this.peer.on('error', e => { if(e.type==='unavailable-id'){ UI.setStatus("🔗 连接 Host..."); const g=new Peer(); g.on('open',()=>this.setupConn(g.connect(id))); } });
             },
 
             setupConn(c) {
                 this.conn = c;
-                c.on('open', () => { 
-                    UI.setStatus("🤝 已连接"); 
-                    document.getElementById('panel').style.display='block';
-                });
+                c.on('open', () => { UI.setStatus("🤝 已连接"); document.getElementById('panel').style.display='block'; });
                 c.on('data', d => this.handleData(d));
                 c.on('close', () => UI.setStatus("🔌 连接断开"));
             },
 
-            // --- 发送逻辑 (背压控制核心) ---
             async sendFile(file) {
                 this.state.file = file;
                 UI.resetGrid();
-                
-                // 1. 计算切分
                 const partSize = Math.ceil(file.size / 16);
-                this.conn.send({ 
-                    type: 'meta', 
-                    name: file.name, size: file.size, mime: file.type, 
-                    partSize: partSize 
-                });
-
-                UI.setProgress(`准备发送: ${file.name}`);
+                this.conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type });
                 
-                // 2. 逐段发送 (Sequential Part Transmission)
+                UI.setProgress(`准备发送: ${file.name}`);
+
                 for(let i=0; i<16; i++) {
                     UI.setGrid(i, 'sending');
-                    UI.setProgress(`正在传输第 ${i+1}/16 段...`);
-                    
                     const start = i * partSize;
                     const end = Math.min(start + partSize, file.size);
-                    if(start >= file.size) { // 文件太小可能不满16段
-                        this.conn.send({ type: 'part-end', part: i }); 
+                    
+                    if(start >= file.size) {
+                        // 空段，直接发结束信号，count=0
+                        this.conn.send({ type: 'part-end', p: i, count: 0 });
                         UI.setGrid(i, 'done');
-                        continue; 
+                        continue;
                     }
 
                     const partBlob = file.slice(start, end);
                     await this.sendPart(i, partBlob);
-                    
                     UI.setGrid(i, 'done');
                 }
-                
                 this.conn.send({ type: 'all-done' });
                 UI.setProgress("✅ 发送完成");
             },
 
-            // 发送单个Part，内部切分为小Chunk
-            async sendPart(partIndex, blob) {
+            async sendPart(p, blob) {
                 const buffer = await blob.arrayBuffer();
                 const totalChunks = Math.ceil(buffer.byteLength / CONFIG.CHUNK_SIZE);
                 
                 for(let j=0; j<totalChunks; j++) {
-                    // 🔥 核心修正：背压控制 (Backpressure)
-                    // 如果缓冲区积压超过 64KB，就暂停等待，直到清空。
-                    // 这绝对能解决“总是留下补发片段”的问题。
-                    while (this.conn.dataChannel.bufferedAmount > 64 * 1024) {
-                        await new Promise(r => setTimeout(r, 10));
-                    }
+                    // 背压控制：防止缓冲区溢出
+                    while (this.conn.dataChannel.bufferedAmount > 64 * 1024) await new Promise(r => setTimeout(r, 5));
 
                     const chunkOffset = j * CONFIG.CHUNK_SIZE;
                     const chunkData = buffer.slice(chunkOffset, chunkOffset + CONFIG.CHUNK_SIZE);
+                    const encrypted = await MultiCrypto.encrypt(p, chunkData);
                     
-                    // 使用第 partIndex 组密钥加密
-                    const encrypted = await MultiCrypto.encrypt(partIndex, chunkData);
-                    
-                    this.conn.send({
-                        type: 'data',
-                        p: partIndex, // Part Index
-                        c: j,         // Chunk Index
-                        d: encrypted  // Payload
-                    });
+                    this.conn.send({ type: 'data', p: p, c: j, d: encrypted });
                 }
-                // 发送该段结束信号
-                this.conn.send({ type: 'part-end', part: partIndex });
+                // 🔥 关键点：发送时告知该段一共有多少个包 (totalChunks)
+                this.conn.send({ type: 'part-end', p: p, count: totalChunks });
             },
 
-            // --- 接收逻辑 ---
             async handleData(data) {
                 if(data.type === 'meta') {
                     this.state.meta = data;
-                    // 初始化16个存储桶
                     this.state.parts = new Array(16).fill(null).map(() => []);
+                    this.state.partCounts = new Array(16).fill(0); // 重置计数器
+                    this.state.hasError = false;
                     UI.resetGrid();
                     UI.setProgress(`⬇ 开始接收: ${data.name}`);
                     return;
@@ -252,93 +202,94 @@
 
                 if(data.type === 'data') {
                     const { p, c, d } = data;
-                    UI.setGrid(p, 'sending'); // 视觉反馈
-                    
+                    if(this.state.hasError) return; // 如果已经出错了，就不处理了
+
+                    UI.setGrid(p, 'sending');
                     try {
                         const decrypted = await MultiCrypto.decrypt(p, d);
-                        // 存入对应桶的对应位置 (解决乱序问题)
                         this.state.parts[p][c] = decrypted;
-                    } catch(e) { console.error("解密失败", p, c); }
+                        this.state.partCounts[p]++; // 记录实收数量
+                    } catch(e) { console.error(e); }
                     return;
                 }
 
                 if(data.type === 'part-end') {
-                    // 该段接收完毕，合并该段内存 (释放小碎片)
-                    const p = data.part;
+                    const { p, count } = data;
+                    const received = this.state.partCounts[p];
+                    
+                    // 🔥 核心校验：应收数量 vs 实收数量
+                    if (received !== count) {
+                        UI.setGrid(p, 'error');
+                        UI.setProgress(`❌ 错误：第${p+1}段丢包 (应收${count}/实收${received})`);
+                        this.state.hasError = true;
+                        // 这里可以加自动重试逻辑，但为了演示清晰，先报错
+                        return;
+                    }
+
+                    // 校验通过，转换Blob
                     if(this.state.parts[p].length > 0) {
+                        // 再次检查有没有 undefined 的空洞
+                        for(let k=0; k<count; k++) {
+                            if(!this.state.parts[p][k]) {
+                                UI.setGrid(p, 'error');
+                                UI.setProgress(`❌ 错误：第${p+1}段存在空洞`);
+                                this.state.hasError = true;
+                                return;
+                            }
+                        }
                         const blob = new Blob(this.state.parts[p]);
-                        this.state.parts[p] = blob; // 替换数组为Blob，节省内存
+                        this.state.parts[p] = blob; 
                     }
                     UI.setGrid(p, 'done');
                 }
 
                 if(data.type === 'all-done') {
-                    this.assembleFile();
+                    if(!this.state.hasError) this.assembleFile();
+                    else UI.setProgress("❌ 传输失败，由于分片丢失无法合并");
                 }
             },
 
             assembleFile() {
-                const meta = this.state.meta;
-                // 合并16个Blob
-                const finalBlob = new Blob(this.state.parts, { type: meta.mime });
-                const url = URL.createObjectURL(finalBlob);
-                
-                const div = document.getElementById('history');
-                div.innerHTML = `
-                    <div class="log-item">
-                        <span>${meta.name} (${(meta.size/1024/1024).toFixed(1)}MB)</span>
-                        <a href="${url}" download="${meta.name}" style="color:var(--primary);font-weight:bold">保存</a>
-                    </div>` + div.innerHTML;
-                
-                UI.setProgress("✅ 接收成功，文件已合并");
-                
-                // 清理内存
-                this.state.parts = [];
+                try {
+                    const meta = this.state.meta;
+                    // 最后一道防线：确保所有部分都是 Blob（或者空段的空数组）
+                    const validParts = this.state.parts.map(p => {
+                        if(p instanceof Blob) return p;
+                        if(Array.isArray(p) && p.length===0) return new Blob([]);
+                        throw new Error("Segment Missing");
+                    });
+
+                    const finalBlob = new Blob(validParts, { type: meta.mime });
+                    const url = URL.createObjectURL(finalBlob);
+                    
+                    const div = document.getElementById('history');
+                    div.innerHTML = `
+                        <div class="log-item">
+                            <span>${meta.name}</span>
+                            <a href="${url}" download="${meta.name}" style="color:var(--primary);font-weight:bold">保存</a>
+                        </div>` + div.innerHTML;
+                    
+                    UI.setProgress("✅ 校验通过，文件完整");
+                    this.state.parts = []; // 释放内存
+                } catch(e) {
+                    UI.setProgress("❌ 合并失败：部分分片未完成");
+                }
             },
 
-            // 辅助
-            genKey: () => {
-                const arr = new Uint8Array(16); crypto.getRandomValues(arr);
-                document.getElementById('credentialInput').value = Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
-            },
-            showQR: () => {
-                const v = document.getElementById('credentialInput').value;
-                if(v.length!=32) return alert("需32位");
-                document.getElementById('qr-modal').style.display='flex';
-                document.getElementById('qrcode-gen').innerHTML='';
-                new QRCode(document.getElementById('qrcode-gen'), {text: location.href.split('#')[0]+'#c='+v});
-            },
-            scanQR: () => {
-                document.getElementById('scan-modal').style.display='flex';
-                const s = new Html5Qrcode("reader");
-                s.start({facingMode:"environment"},{fps:10}, t=>{
-                    if(t.includes('c=')) t=t.split('c=')[1];
-                    if(t.length===32) { document.getElementById('credentialInput').value=t; App.stopScan(); setTimeout(()=>App.init(),500); }
-                });
-                App.stopScan = () => s.stop().then(()=>document.getElementById('scan-modal').style.display='none').catch(()=>{});
-            }
+            // 辅助功能
+            genKey: () => document.getElementById('credentialInput').value = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join(''),
+            showQR: () => { const v=document.getElementById('credentialInput').value; if(v.length!=32)return alert("需32位"); document.getElementById('qr-modal').style.display='flex'; document.getElementById('qrcode-gen').innerHTML=''; new QRCode(document.getElementById('qrcode-gen'),{text:location.href.split('#')[0]+'#c='+v}); },
+            scanQR: () => { document.getElementById('scan-modal').style.display='flex'; const s=new Html5Qrcode("reader"); s.start({facingMode:"environment"},{fps:10},t=>{ if(t.includes('c='))t=t.split('c=')[1]; if(t.length===32){ document.getElementById('credentialInput').value=t; App.stopScan(); setTimeout(()=>App.init(),500); } }); App.stopScan=()=>s.stop().then(()=>document.getElementById('scan-modal').style.display='none').catch(()=>{}); }
         };
 
         const UI = {
             setStatus: s => document.getElementById('status').innerText = s,
             setProgress: s => document.getElementById('progress-text').innerText = s,
-            resetGrid: () => {
-                for(let i=0;i<16;i++) {
-                    const el = document.getElementById(`b-${i}`);
-                    el.className = 'grid-item';
-                }
-            },
-            setGrid: (idx, status) => {
-                const el = document.getElementById(`b-${idx}`);
-                // 只有状态升级时才改变 (sending -> done)，防止闪烁
-                if(!el.classList.contains('done')) el.className = `grid-item ${status}`;
-            }
+            resetGrid: () => { for(let i=0;i<16;i++) document.getElementById(`b-${i}`).className = 'grid-item'; },
+            setGrid: (idx, status) => { document.getElementById(`b-${idx}`).className = `grid-item ${status}`; }
         };
 
-        document.getElementById('fileInput').addEventListener('change', e => {
-            if(e.target.files[0]) App.sendFile(e.target.files[0]);
-        });
-        
+        document.getElementById('fileInput').addEventListener('change', e => { if(e.target.files[0]) App.sendFile(e.target.files[0]); });
         window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value=location.hash.split('c=')[1]; setTimeout(()=>App.init(),600); } };
     </script>
 </body>
