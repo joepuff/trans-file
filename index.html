@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>局域网互传 V33 [自动愈合]</title>
+    <title>局域网互传 V34 [最终完美版]</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
@@ -17,16 +17,18 @@
         button { border: none; padding: 0 14px; border-radius: 8px; font-weight: 600; cursor: pointer; background: #e5e5ea; font-size: 0.85rem; }
         .btn-main { background: var(--primary); color: white; }
 
+        /* 25x4 紧凑网格 */
         .grid-compact { display: grid; grid-template-columns: repeat(25, 1fr); gap: 1px; margin: 15px 0; background: #f0f0f0; padding: 2px; border-radius: 4px; }
         .grid-item { aspect-ratio: 1; background: #d1d1d6; border-radius: 1px; font-size: 0; transition: 0.1s; }
         .grid-item.done { background: var(--success); }
         .grid-item.sending { background: var(--primary); }
-        .grid-item.waiting { background: #ffcc00; } /* 等待ACK */
-        .grid-item.retry { background: var(--retry); }   /* 正在重试 */
-        .grid-item.error { background: var(--error); }   /* 彻底失败 */
+        .grid-item.waiting { background: #ffcc00; } /* 黄色等待确认 */
+        .grid-item.retry { background: var(--retry); }   /* 橙色重试 */
+        .grid-item.error { background: var(--error); }   /* 红色失败 */
 
         .drop-zone { border: 2px dashed #c7c7cc; padding: 20px; text-align: center; border-radius: 12px; margin-top: 15px; transition: 0.3s; opacity: 0.5; pointer-events: none; cursor: not-allowed; background: #fafafa; }
         .drop-zone.active { opacity: 1; pointer-events: all; border-color: var(--primary); background: #fff; cursor: pointer; }
+        .drop-zone.active:active { background: #f0f7ff; }
         
         .log-item { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 99; }
@@ -35,8 +37,8 @@
 </head>
 <body>
     <div class="card">
-        <h3>V33 自动愈合版 <span style="font-size:0.75rem;background:#ff9500;color:#fff;padding:2px 6px;border-radius:4px;">Auto Retry</span></h3>
-        <div style="color:#8e8e93; font-size:0.75rem; margin-bottom:12px">错误自动重传 • 打破传输死锁</div>
+        <h3>V34 最终版 <span style="font-size:0.75rem;background:#34c759;color:#fff;padding:2px 6px;border-radius:4px;">Secure & Stable</span></h3>
+        <div style="color:#8e8e93; font-size:0.75rem; margin-bottom:12px">安全修复 • 自动愈合 • 停等协议</div>
 
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="输入32位密钥" maxlength="32">
@@ -52,6 +54,7 @@
         <div id="panel" style="display:none">
             <div class="grid-compact" id="statusGrid"></div>
             <div id="progress-text" style="text-align:center; font-size:0.75rem; color:#8e8e93; margin-bottom:10px;">等待校验...</div>
+            
             <div class="drop-zone" id="dropZone">
                 <div style="font-size:1.5rem">📄</div>
                 <div id="dropText" style="font-size:0.9rem">等待握手...</div>
@@ -72,9 +75,9 @@
         const CONFIG = {
             CHUNK_SIZE: 16 * 1024, 
             TOTAL_PARTS: 100, 
-            SALT: "V33_RETRY_SALT",
-            THROTTLE_MS: 3,
-            MAX_RETRIES: 5 // 🔥 每个分段允许重试5次
+            SALT: "V34_SECURE_SALT",
+            THROTTLE_MS: 3,     // 强制延时防丢包
+            MAX_RETRIES: 5      // 自动愈合重试次数
         };
 
         const MultiCrypto = {
@@ -89,7 +92,7 @@
                     const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(i.toString()), iterations: 5000, hash: "SHA-256" }, keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
                     this.subKeys.push(key);
                 }
-                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_V33"));
+                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_V34"));
                 this.keyHash = Array.from(new Uint8Array(fingerprint)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 8);
                 const hash = await crypto.subtle.digest('SHA-256', enc.encode(mainKey));
                 return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 32);
@@ -110,7 +113,6 @@
 
         const App = {
             peer: null, conn: null, isVerified: false,
-            // 🔥 使用 signalResolver 处理 ACK(true) 和 RETRY(false)
             signalResolver: null,
             state: { file: null, parts: [], meta: null, partCounts: new Array(CONFIG.TOTAL_PARTS).fill(0), hasError: false },
 
@@ -156,53 +158,42 @@
                     const end = Math.min(start + partSize, file.size);
                     const partBlob = file.slice(start, end);
                     
-                    // 🔥 核心循环：支持重试
                     let attempts = 0;
                     let success = false;
                     
                     while(!success && attempts < CONFIG.MAX_RETRIES) {
-                        // 如果是重试，显示橙色
                         if(attempts > 0) {
                             UI.setGrid(i, 'retry');
-                            UI.setProgress(`⚠️ 第${i+1}段重传 (${attempts}/${CONFIG.MAX_RETRIES})`);
+                            UI.setProgress(`⚠️ 重传第${i+1}段 (${attempts}/${CONFIG.MAX_RETRIES})`);
                         } else {
                             UI.setGrid(i, 'sending');
                         }
 
-                        // 发送数据
                         if(start >= file.size) { 
                             this.conn.send({ type: 'part-end', p: i, count: 0 }); 
                         } else {
                             await this.sendPart(i, partBlob);
                         }
 
-                        UI.setGrid(i, 'waiting'); // 变黄等待
-                        
-                        // 等待反馈：true=ACK, false=RETRY
+                        UI.setGrid(i, 'waiting');
                         success = await this.waitForSignal();
                         
-                        if(!success) {
-                            attempts++;
-                            console.log(`Part ${i} failed, retrying...`);
-                        }
+                        if(!success) { attempts++; console.log(`Retry part ${i}`); }
                     }
 
                     if(success) {
                         UI.setGrid(i, 'done');
                     } else {
                         UI.setGrid(i, 'error');
-                        UI.setProgress(`❌ 第${i+1}段传输失败，已终止`);
-                        return; // 彻底失败，停止传输
+                        UI.setProgress(`❌ 传输失败，已终止`);
+                        return;
                     }
                 }
                 this.conn.send({ type: 'all-done' });
                 UI.setProgress("✅ 发送完成");
             },
 
-            // 等待信号锁
-            async waitForSignal() {
-                return new Promise(resolve => { this.signalResolver = resolve; });
-            },
+            async waitForSignal() { return new Promise(resolve => { this.signalResolver = resolve; }); },
 
             async sendPart(p, blob) {
                 const buffer = await blob.arrayBuffer();
@@ -232,17 +223,11 @@
                 }
                 if(!this.isVerified) return;
 
-                // 2. 发送方接收反馈
-                if(data.type === 'ack') {
-                    if(this.signalResolver) { this.signalResolver(true); this.signalResolver = null; }
-                    return;
-                }
-                if(data.type === 'retry') {
-                    if(this.signalResolver) { this.signalResolver(false); this.signalResolver = null; }
-                    return;
-                }
+                // 2. 发送方信号
+                if(data.type === 'ack') { if(this.signalResolver) { this.signalResolver(true); this.signalResolver = null; } return; }
+                if(data.type === 'retry') { if(this.signalResolver) { this.signalResolver(false); this.signalResolver = null; } return; }
 
-                // 3. 接收方逻辑
+                // 3. 接收方数据
                 if(data.type === 'meta') {
                     this.state.meta = data;
                     this.state.parts = new Array(CONFIG.TOTAL_PARTS).fill(null).map(() => []);
@@ -254,23 +239,19 @@
                 }
                 if(data.type === 'data') {
                     const { p, c, d } = data;
-                    if(this.state.hasError) return; // 全局错误锁
+                    if(this.state.hasError) return;
                     UI.setGrid(p, 'sending');
                     try {
                         const decrypted = await MultiCrypto.decrypt(p, d);
                         this.state.parts[p][c] = decrypted;
                         this.state.partCounts[p]++;
-                    } catch(e) { /* 解密失败暂不报错，等 part-end 统一结算 */ }
+                    } catch(e) { /* 等待 part-end 结算 */ }
                     return;
                 }
                 if(data.type === 'part-end') {
                     const { p, count } = data;
                     let success = true;
-
-                    // 校验数量
                     if (this.state.partCounts[p] !== count) success = false;
-                    
-                    // 校验空洞
                     if(success && this.state.parts[p].length > 0) {
                         for(let k=0; k<count; k++) if(!this.state.parts[p][k]) success = false;
                     }
@@ -278,13 +259,11 @@
                     if(success) {
                         if(this.state.parts[p].length > 0) this.state.parts[p] = new Blob(this.state.parts[p]);
                         UI.setGrid(p, 'done');
-                        this.conn.send({ type: 'ack', p: p }); // ✅ 发送成功确认
+                        this.conn.send({ type: 'ack', p: p });
                     } else {
-                        UI.setGrid(p, 'retry'); // 变橙色
-                        // 清理脏数据，准备重接
-                        this.state.parts[p] = []; 
-                        this.state.partCounts[p] = 0;
-                        this.conn.send({ type: 'retry', p: p }); // ❌ 发送重试请求
+                        UI.setGrid(p, 'retry');
+                        this.state.parts[p] = []; this.state.partCounts[p] = 0;
+                        this.conn.send({ type: 'retry', p: p });
                     }
                 }
                 if(data.type === 'all-done') {
@@ -321,13 +300,35 @@
             renderGrid: () => { const box=document.getElementById('statusGrid'); box.innerHTML=''; for(let i=0;i<CONFIG.TOTAL_PARTS;i++){ const d=document.createElement('div'); d.className='grid-item'; d.id=`b-${i}`; box.appendChild(d); } },
             resetGrid: () => { for(let i=0;i<CONFIG.TOTAL_PARTS;i++) document.getElementById(`b-${i}`).className='grid-item'; },
             setGrid: (idx, status) => { document.getElementById(`b-${idx}`).className = `grid-item ${status}`; },
+            
+            // 🔥 V34 安全修复：杜绝 XSS
             addHistory: (name, size, url) => {
                 const div = document.getElementById('history');
                 const sizeStr = (size/1024/1024).toFixed(2) + ' MB';
-                div.innerHTML = `<div class="log-item"><span>${name} <small style="color:#888">(${sizeStr})</small></span><a href="${url}" download="${name}" style="color:#007aff;font-weight:bold;text-decoration:none">⬇ 保存</a></div>` + div.innerHTML;
+                const item = document.createElement('div');
+                item.className = 'log-item';
+                
+                // 安全创建节点
+                const infoSpan = document.createElement('span');
+                infoSpan.textContent = `${name} `; // 使用 textContent
+                const sizeSmall = document.createElement('small');
+                sizeSmall.style.color = '#888';
+                sizeSmall.textContent = `(${sizeStr})`;
+                infoSpan.appendChild(sizeSmall);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = name; // 使用属性设置下载名
+                link.textContent = '⬇ 保存';
+                link.style.cssText = 'color:#007aff;font-weight:bold;text-decoration:none';
+                
+                item.appendChild(infoSpan);
+                item.appendChild(link);
+                div.prepend(item);
             }
         };
 
+        // 事件绑定分离
         document.getElementById('dropZone').onclick = () => { if(document.getElementById('dropZone').classList.contains('active')) document.getElementById('fileInput').click(); };
         document.getElementById('fileInput').onchange = (e) => { if(e.target.files[0]) { App.sendFile(e.target.files[0]); e.target.value = null; } };
         window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value=location.hash.split('c=')[1]; setTimeout(()=>App.init(),600); } };
