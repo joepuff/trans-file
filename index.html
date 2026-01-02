@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>局域网互传 V24 [流式硬盘写入版]</title>
+    <title>局域网互传 V24 [Hybrid Final]</title>
     
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
@@ -33,6 +33,7 @@
 
         .drop-zone { border: 2px dashed #d2d2d7; border-radius: 16px; padding: 40px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
         .drop-zone:active { background: #f0f7ff; border-color: var(--primary); }
+        .drop-zone.dragover { border-color: var(--primary); background: #f0f7ff; }
         
         .progress-container { margin-top: 24px; display: none; }
         .progress-track { height: 6px; background: #e5e5ea; border-radius: 3px; overflow: hidden; }
@@ -49,7 +50,7 @@
 </head>
 <body>
     <div class="card">
-        <h3>闪传 V24 <span style="font-size:0.8rem; background:#007aff; color:#fff; padding:2px 6px; border-radius:4px; vertical-align:middle;">Hybrid</span></h3>
+        <h3>闪传 V24 <span style="font-size:0.8rem; background:#007aff; color:#fff; padding:2px 6px; border-radius:4px; vertical-align:middle;">Hybrid Fixed</span></h3>
         <div class="subtitle">流式硬盘写入(Chrome/Edge) • 内存兼容(iOS)</div>
         
         <div class="input-group">
@@ -67,7 +68,7 @@
         </div>
 
         <div id="transfer-panel" style="display:none; margin-top:20px;">
-            <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <div class="drop-zone" id="dropArea" onclick="document.getElementById('fileInput').click()">
                 <div style="font-size:2.5rem; margin-bottom:10px">📤</div>
                 <div style="font-weight:600">点击发送文件</div>
                 <div style="font-size:0.8rem; color:#86868b; margin-top:4px;">支持超大文件流式传输</div>
@@ -128,18 +129,13 @@
             }
         };
 
-        // --- 状态管理 (包含流式句柄) ---
+        // --- 状态管理 ---
         const State = {
             peer: null, conn: null,
             isBusy: false,
             ackTimer: null,
             retryCount: 0,
-            
-            // 接收相关
-            fileHandle: null,     // 硬盘文件句柄 (Stream Mode)
-            writableStream: null, // 写入流 (Stream Mode)
-            useStreamMode: false, // 标记当前模式
-            
+            fileHandle: null, writableStream: null, useStreamMode: false,
             incoming: { chunks: [], meta: null, received: 0, total: 0 },
             sendingFile: null,
 
@@ -196,8 +192,10 @@
                 c.on('close', () => { UI.toast("🔌 断开", "error"); State.reset(); });
             },
 
-            // --- 发送 ---
             async sendFile(file) {
+                // 🔥 修复点：检查连接状态
+                if(!State.conn || !State.conn.open) return UI.toast("❌ 未连接，请先点击[连接]", "error");
+                
                 if(State.isBusy && !confirm("中断当前传输？")) return;
                 State.reset();
                 State.isBusy = true;
@@ -222,7 +220,7 @@
                             UI.updateProgress(100, "⏳ 等待对方保存...");
                             State.ackTimer = setTimeout(() => { if(State.isBusy) { UI.toast("⚠️ 响应超时", "warning"); State.reset(); } }, CONSTANTS.ACK_TIMEOUT);
                         } else {
-                            for(let k=0; k<3; k++) State.conn.send({ type: 'retry-end' }); // 结束信号连发3次
+                            for(let k=0; k<3; k++) State.conn.send({ type: 'retry-end' });
                             UI.updateProgress(100, "🔄 补发完毕");
                         }
                         return;
@@ -235,7 +233,6 @@
                     reader.onload = async (e) => {
                         if(State.conn && State.conn.open) {
                             const enc = await Security.encrypt(e.target.result);
-                            // 🔥 补发模式下，单包连发3次 (Aggressive Retry)
                             const burst = specificList ? 3 : 1;
                             for(let k=0; k<burst; k++) State.conn.send({ type: 'chunk', seq, payload: enc });
                             
@@ -249,7 +246,6 @@
                 next();
             },
 
-            // --- 接收 ---
             async handleData(data) {
                 if(data.type === 'transfer-complete') {
                     if(State.ackTimer) clearTimeout(State.ackTimer);
@@ -263,9 +259,8 @@
                     State.isBusy = true;
                     State.incoming.meta = data;
                     State.incoming.total = data.total;
-                    State.incoming.chunks = new Array(data.total); // 在流模式下，这只是个占位符/BitMap
+                    State.incoming.chunks = new Array(data.total);
                     
-                    // 🔥 核心分支：尝试开启硬盘流式写入
                     if ('showSaveFilePicker' in window) {
                         try {
                             State.fileHandle = await window.showSaveFilePicker({ suggestedName: data.name });
@@ -273,7 +268,7 @@
                             State.useStreamMode = true;
                             UI.toast("💾 硬盘直写模式已激活", "disk");
                         } catch(e) {
-                            console.log("用户取消或不支持，回退内存模式");
+                            console.log("回退内存模式");
                             State.useStreamMode = false;
                         }
                     }
@@ -285,20 +280,17 @@
 
                 if(data.type === 'chunk' && State.isBusy) {
                     try {
-                        // 只有当这个包还没收录时才处理
                         if(!State.incoming.chunks[data.seq]) {
                             const decrypted = await Security.decrypt(data.payload);
                             
                             if (State.useStreamMode && State.writableStream) {
-                                // 🌟 流式模式：写硬盘，不存内存
                                 await State.writableStream.write({
                                     type: 'write',
                                     position: data.seq * CONSTANTS.CHUNK_SIZE,
                                     data: decrypted
                                 });
-                                State.incoming.chunks[data.seq] = true; // 标记收到，但不存数据
+                                State.incoming.chunks[data.seq] = true;
                             } else {
-                                // 🧊 内存模式：存入数组
                                 State.incoming.chunks[data.seq] = decrypted;
                             }
 
@@ -325,14 +317,14 @@
             verifyAndFinish() {
                 const missing = [];
                 for(let i=0; i<State.incoming.total; i++) {
-                    if(!State.incoming.chunks[i]) missing.push(i); // 检查是否为 undefined
+                    if(!State.incoming.chunks[i]) missing.push(i);
                 }
 
                 if(missing.length > 0) {
                     State.retryCount++;
                     if(State.retryCount > 5) {
                         UI.toast("❌ 丢包过多，强制结束", "error");
-                        this.finalizeFile(); // 强制保存
+                        this.finalizeFile();
                         return;
                     }
                     UI.updateProgress(99, `⚠️ 第${State.retryCount}次补包 (${missing.length})`);
@@ -346,17 +338,12 @@
                 const meta = State.incoming.meta;
                 let url = null;
 
-                // 🌟 流式模式收尾：关闭流
                 if (State.useStreamMode && State.writableStream) {
                     try {
                         await State.writableStream.close();
                         UI.toast("✅ 文件已写入硬盘", "success");
-                        // 流式模式下无法直接获取 Blob URL (因为没存内存)，所以这里不生成预览链接
-                        // 但我们可以生成一个假的“已保存”记录
                     } catch(e) { UI.toast("文件关闭失败", "error"); }
-                } 
-                // 🧊 内存模式收尾：生成 Blob
-                else {
+                } else {
                     let mime = meta.mime || 'application/octet-stream';
                     const cleanChunks = State.incoming.chunks.filter(c => c !== undefined);
                     const blob = new Blob(cleanChunks, { type: mime });
@@ -365,7 +352,6 @@
                 }
 
                 UI.addHistory(meta.name, meta.size, url, meta.mime);
-
                 if(State.conn) State.conn.send({ type: 'transfer-complete' });
                 State.reset();
             }
@@ -404,6 +390,20 @@
                 box.prepend(div);
             }
         };
+
+        // --- 🔥 修复点：绑定事件监听器 ---
+        document.getElementById('fileInput').addEventListener('change', e => {
+            if(e.target.files[0]) App.sendFile(e.target.files[0]);
+        });
+        
+        // 拖拽支持
+        const dropZone = document.getElementById('dropArea');
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault(); dropZone.classList.remove('dragover');
+            if(e.dataTransfer.files[0]) App.sendFile(e.dataTransfer.files[0]);
+        });
 
         // 辅助逻辑
         App.genKey = () => document.getElementById('credentialInput').value = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');
