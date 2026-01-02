@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>局域网互传 V30 [紧凑布局]</title>
+    <title>局域网互传 V31 [降速稳压]</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
@@ -17,35 +17,14 @@
         button { border: none; padding: 0 14px; border-radius: 8px; font-weight: 600; cursor: pointer; background: #e5e5ea; font-size: 0.85rem; }
         .btn-main { background: var(--primary); color: white; }
 
-        /* 🔥 V30 核心修改：25列 x 4行 = 100格 */
-        .grid-compact { 
-            display: grid; 
-            grid-template-columns: repeat(25, 1fr); /* 一行25个 */
-            gap: 1px; /* 极窄间隙，看起来像条纹 */
-            margin: 15px 0; 
-            background: #f0f0f0;
-            padding: 2px;
-            border-radius: 4px;
-        }
-        .grid-item { 
-            aspect-ratio: 1; /* 保持正方形 */
-            background: #d1d1d6; 
-            border-radius: 1px; 
-            font-size: 0; 
-            transition: 0.1s; 
-        }
+        .grid-compact { display: grid; grid-template-columns: repeat(25, 1fr); gap: 1px; margin: 15px 0; background: #f0f0f0; padding: 2px; border-radius: 4px; }
+        .grid-item { aspect-ratio: 1; background: #d1d1d6; border-radius: 1px; font-size: 0; transition: 0.1s; }
         .grid-item.done { background: var(--success); }
         .grid-item.sending { background: var(--primary); }
         .grid-item.error { background: var(--error); }
 
-        .drop-zone { 
-            border: 2px dashed #c7c7cc; padding: 20px; text-align: center; border-radius: 12px; 
-            margin-top: 15px; transition: 0.3s; 
-            opacity: 0.5; pointer-events: none; cursor: not-allowed;
-            background: #fafafa;
-        }
+        .drop-zone { border: 2px dashed #c7c7cc; padding: 20px; text-align: center; border-radius: 12px; margin-top: 15px; transition: 0.3s; opacity: 0.5; pointer-events: none; cursor: not-allowed; background: #fafafa; }
         .drop-zone.active { opacity: 1; pointer-events: all; border-color: var(--primary); background: #fff; cursor: pointer; }
-        .drop-zone.active:active { background: #f0f7ff; }
         
         .log-item { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 99; }
@@ -54,8 +33,8 @@
 </head>
 <body>
     <div class="card">
-        <h3>V30 紧凑版 <span style="font-size:0.75rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">Compact</span></h3>
-        <div style="color:#8e8e93; font-size:0.75rem; margin-bottom:12px">100段 (25x4) • 握手校验 • 零丢包</div>
+        <h3>V31 稳压版 <span style="font-size:0.75rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">Stable</span></h3>
+        <div style="color:#8e8e93; font-size:0.75rem; margin-bottom:12px">解决电脑传手机丢包 • 强制微小延时</div>
 
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="输入32位密钥" maxlength="32">
@@ -71,7 +50,6 @@
         <div id="panel" style="display:none">
             <div class="grid-compact" id="statusGrid"></div>
             <div id="progress-text" style="text-align:center; font-size:0.75rem; color:#8e8e93; margin-bottom:10px;">等待校验...</div>
-
             <div class="drop-zone" id="dropZone">
                 <div style="font-size:1.5rem">📄</div>
                 <div id="dropText" style="font-size:0.9rem">等待握手...</div>
@@ -92,7 +70,9 @@
         const CONFIG = {
             CHUNK_SIZE: 16 * 1024, 
             TOTAL_PARTS: 100, 
-            SALT: "V30_COMPACT_SALT"
+            SALT: "V31_THROTTLE_SALT",
+            // 🔥 核心修改：每包强制延时 (ms)。电脑传手机建议设为 2-5
+            THROTTLE_MS: 3 
         };
 
         const MultiCrypto = {
@@ -107,7 +87,7 @@
                     const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(i.toString()), iterations: 5000, hash: "SHA-256" }, keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
                     this.subKeys.push(key);
                 }
-                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_V30"));
+                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_V31"));
                 this.keyHash = Array.from(new Uint8Array(fingerprint)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 8);
                 const hash = await crypto.subtle.digest('SHA-256', enc.encode(mainKey));
                 return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 32);
@@ -184,12 +164,21 @@
             async sendPart(p, blob) {
                 const buffer = await blob.arrayBuffer();
                 const totalChunks = Math.ceil(buffer.byteLength / CONFIG.CHUNK_SIZE);
+                
                 for(let j=0; j<totalChunks; j++) {
+                    // 1. 缓冲区检查 (背压)
                     while (this.conn.dataChannel.bufferedAmount > 0) await new Promise(r => setTimeout(r, 1));
+                    
                     const chunkOffset = j * CONFIG.CHUNK_SIZE;
                     const chunkData = buffer.slice(chunkOffset, chunkOffset + CONFIG.CHUNK_SIZE);
                     const encrypted = await MultiCrypto.encrypt(p, chunkData);
                     this.conn.send({ type: 'data', p: p, c: j, d: encrypted });
+
+                    // 🔥 2. 核心修改：强制微小延时 (Throttle)
+                    // 这给手机CPU留出解密时间，防止 buffer 溢出
+                    if(CONFIG.THROTTLE_MS > 0) {
+                        await new Promise(r => setTimeout(r, CONFIG.THROTTLE_MS));
+                    }
                 }
                 this.conn.send({ type: 'part-end', p: p, count: totalChunks });
             },
