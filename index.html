@@ -3,371 +3,414 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>局域网跨设备文件互传</title>
+    <title>局域网互传 V24 [流式硬盘写入版]</title>
     
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
-        :root { --primary: #5856d6; --bg: #f2f2f7; --card-bg: #fff; --text: #1c1c1e; }
+        :root { --primary: #007aff; --success: #34c759; --warning: #ff9500; --danger: #ff3b30; --bg: #f5f5f7; --card: #ffffff; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 16px; background: var(--bg); color: var(--text); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: var(--bg); color: #1d1d1f; }
         
-        .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 20px; }
-        .tag { font-size: 0.7rem; background: #efeffc; color: var(--primary); padding: 3px 8px; border-radius: 6px; font-weight: 700; margin-left: 5px; }
+        .card { background: var(--card); padding: 24px; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.04); margin-bottom: 24px; transition: transform 0.2s; }
+        .subtitle { font-size: 0.85rem; color: #86868b; margin-bottom: 20px; }
         
-        .input-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-        input[type="text"] { flex: 1 1 100%; min-width: 200px; padding: 12px; border: 1px solid #e5e5ea; border-radius: 10px; font-family: monospace; outline: none; }
-        .btn-row { display: flex; gap: 8px; flex: 1 1 auto; }
-        button { height: 44px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;}
-        .btn-icon { background: #e9e9eb; flex: 1; }
-        .btn-main { background: var(--primary); color: white; flex: 2; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex: 1; padding: 12px 16px; border: 1px solid #d2d2d7; border-radius: 12px; font-family: monospace; outline: none; background: #fbfbfd; }
         
-        @media (min-width: 480px) { input[type="text"] { flex: 2; } .btn-row { flex: 3; } }
+        .action-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+        button { height: 48px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
+        .btn-icon { background: #e5e5ea; color: #1d1d1f; }
+        .btn-primary { background: var(--primary); color: white; grid-column: span 2; }
+        .btn-primary:active { transform: scale(0.98); opacity: 0.9; }
 
-        #status { font-size: 0.9rem; color: #636366; text-align: center; margin-bottom: 20px; padding: 10px; background: #f2f2f7; border-radius: 10px; }
-        
-        .file-box { border: 2px dashed #c7c7cc; padding: 40px 20px; text-align: center; border-radius: 12px; cursor: pointer; background: #fff; transition: 0.2s;}
-        .file-box:active { background: #f0f0f0; border-color: var(--primary); }
-        
-        .progress-wrap { margin-top: 20px; display: none; }
-        .progress-bar { height: 8px; background: #e5e5ea; border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.1s linear; }
-        .progress-info { display: flex; justify-content: space-between; font-size: 0.8rem; color: #8e8e93; margin-top: 6px; }
+        #status-pill { display: inline-block; padding: 6px 16px; background: #e5e5ea; border-radius: 20px; font-size: 0.85rem; font-weight: 500; margin-bottom: 20px; color: #6e6e73; transition: 0.3s; }
+        .status-success { background: #e1fcdb !important; color: #1d6f42 !important; }
+        .status-error { background: #fee2e2 !important; color: #991b1b !important; }
+        .status-disk { background: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #bae6fd; }
 
-        .log-item { padding: 15px 0; border-bottom: 1px solid #e5e5ea; }
-        .media-preview { width: 100%; max-height: 300px; border-radius: 8px; background: #000; margin-top: 10px; object-fit: contain; }
-        .btn-dl { font-size: 0.85rem; color: var(--primary); text-decoration: none; padding: 6px 12px; background: #efeffc; border-radius: 8px; display: inline-block; margin-top: 8px; font-weight: bold;}
+        .drop-zone { border: 2px dashed #d2d2d7; border-radius: 16px; padding: 40px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
+        .drop-zone:active { background: #f0f7ff; border-color: var(--primary); }
+        
+        .progress-container { margin-top: 24px; display: none; }
+        .progress-track { height: 6px; background: #e5e5ea; border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.2s linear; }
+        .progress-meta { display: flex; justify-content: space-between; font-size: 0.8rem; color: #86868b; margin-top: 8px; font-variant-numeric: tabular-nums; }
 
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter: blur(5px); justify-content:center; align-items:center; z-index:999; flex-direction: column; }
-        #qrcode-gen { background: white; padding: 20px; border-radius: 20px; }
-        #reader { width: 100%; max-width: 400px; border-radius: 16px; overflow: hidden; }
-        .close-btn { margin-top: 20px; background: white; padding: 10px 30px; border-radius: 30px; }
+        .history-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #f5f5f7; gap: 12px; }
+        .file-info { flex: 1; min-width: 0; }
+        .btn-save { padding: 6px 12px; background: #e8f2ff; color: var(--primary); border-radius: 6px; font-size: 0.8rem; text-decoration: none; font-weight: 600; }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 24px; border-radius: 24px; width: 90%; max-width: 320px; text-align: center; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h3>V22 连续传输版 <span class="tag">Multi-File</span></h3>
-        <div style="font-size:0.85rem; color:#8e8e93; margin-bottom:15px">状态自动重置 • 传完一个再传一个</div>
+        <h3>闪传 V24 <span style="font-size:0.8rem; background:#007aff; color:#fff; padding:2px 6px; border-radius:4px; vertical-align:middle;">Hybrid</span></h3>
+        <div class="subtitle">流式硬盘写入(Chrome/Edge) • 内存兼容(iOS)</div>
         
         <div class="input-group">
-            <input type="text" id="credentialInput" placeholder="输入32位凭证" maxlength="32">
-            <div class="btn-row">
-                <button class="btn-icon" onclick="genKey()">🎲</button>
-                <button class="btn-icon" onclick="showQR()">🏁</button>
-                <button class="btn-icon" onclick="scanQR()">📷</button>
-                <button class="btn-main" onclick="initApp()">连接</button>
-            </div>
+            <input type="text" id="credentialInput" placeholder="输入或生成 32位 密钥" maxlength="32">
+        </div>
+        <div class="action-bar">
+            <button class="btn-icon" onclick="App.genKey()">🎲</button>
+            <button class="btn-icon" onclick="App.showQR()">📱</button>
+            <button class="btn-icon" onclick="App.scanQR()">📷</button>
+            <button class="btn-primary" onclick="App.init()">🚀 连接</button>
         </div>
         
-        <div id="status">等待操作...</div>
+        <div style="text-align:center;">
+            <div id="status-pill">等待连接...</div>
+        </div>
 
-        <div id="panel" style="display:none;">
-            <div class="file-box" onclick="document.getElementById('fileInput').click()">
+        <div id="transfer-panel" style="display:none; margin-top:20px;">
+            <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
                 <div style="font-size:2.5rem; margin-bottom:10px">📤</div>
                 <div style="font-weight:600">点击发送文件</div>
-                <div style="font-size:0.85rem; color:#8e8e93; margin-top:5px">无需刷新，支持连续发送</div>
+                <div style="font-size:0.8rem; color:#86868b; margin-top:4px;">支持超大文件流式传输</div>
                 <input type="file" id="fileInput" style="display:none" onclick="this.value=null">
             </div>
             
-            <div class="progress-wrap" id="prog-box">
-                <div class="progress-bar"><div class="progress-fill" id="p-fill"></div></div>
-                <div class="progress-info">
-                    <span id="p-txt">0%</span>
-                    <span id="p-detail">0/0 MB</span>
+            <div class="progress-container" id="prog-box">
+                <div class="progress-track"><div class="progress-fill" id="p-fill"></div></div>
+                <div class="progress-meta">
+                    <span id="p-status">准备中...</span>
+                    <span id="p-nums">0/0 MB</span>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h4 style="margin:0 0 10px 0; color:#8e8e93; font-size:0.9rem;">传输记录</h4>
-        <div id="history"><div style="text-align:center; color:#c7c7cc; font-size:0.9rem; padding:10px">暂无记录</div></div>
+        <h4 style="margin:0 0 16px 0; font-size:1rem;">传输历史</h4>
+        <div id="history" style="font-size:0.9rem;"></div>
     </div>
 
-    <div id="qr-modal" class="modal" onclick="this.style.display='none'"><div id="qrcode-gen"></div></div>
-    <div id="scan-modal" class="modal"><div id="reader"></div><button class="close-btn" onclick="stopScan()">关闭摄像头</button></div>
+    <div id="qr-modal" class="modal" onclick="this.style.display='none'"><div class="modal-content"><div id="qrcode-gen"></div></div></div>
+    <div id="scan-modal" class="modal"><div class="modal-content" style="padding:0; overflow:hidden;"><div id="reader"></div><button onclick="App.stopScan()" style="width:100%; border-radius:0; height:50px; background:#fff; border:none;">关闭</button></div></div>
 
     <script>
-        const CHUNK_SIZE = 64 * 1024; 
-        const CONFIG = {
-            pbkdf2: { name: "PBKDF2", hash: "SHA-256", iterations: 500000 },
-            aes: { name: "AES-GCM", length: 256 },
-            salt_room: "V22_MULTI_ROOM", salt_key: "V22_MULTI_KEY"
+        // --- 核心配置 ---
+        const CONSTANTS = {
+            CHUNK_SIZE: 64 * 1024, 
+            ACK_TIMEOUT: 15000, 
+            SALT_ROOM: "V24_SALT_ROOM", 
+            SALT_KEY: "V24_SALT_KEY"
         };
 
-        const SecurityCore = {
-            encKey: null,
-            async init(password) {
+        // --- 安全模块 ---
+        const Security = {
+            key: null,
+            async init(pwd) {
                 const enc = new TextEncoder();
-                const baseKey = await crypto.subtle.importKey("raw", enc.encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
-                this.encKey = await crypto.subtle.deriveKey({ ...CONFIG.pbkdf2, salt: enc.encode(CONFIG.salt_key) }, baseKey, CONFIG.aes, false, ["encrypt", "decrypt"]);
-                const hash = await crypto.subtle.digest('SHA-256', enc.encode(password + CONFIG.salt_room));
-                return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').substr(0,32);
+                const keyMat = await crypto.subtle.importKey("raw", enc.encode(pwd), {name:"PBKDF2"}, false, ["deriveKey"]);
+                this.key = await crypto.subtle.deriveKey(
+                    { name: "PBKDF2", salt: enc.encode(CONSTANTS.SALT_KEY), iterations: 100000, hash: "SHA-256" },
+                    keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+                );
+                const roomHash = await crypto.subtle.digest('SHA-256', enc.encode(pwd + CONSTANTS.SALT_ROOM));
+                return Array.from(new Uint8Array(roomHash)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 32);
             },
-            async encrypt(chunk) {
+            async encrypt(data) {
                 const iv = crypto.getRandomValues(new Uint8Array(12));
-                const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.encKey, chunk);
-                const packed = new Uint8Array(12 + cipher.byteLength);
-                packed.set(iv, 0); packed.set(new Uint8Array(cipher), 12);
-                return packed;
+                const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.key, data);
+                const packet = new Uint8Array(12 + cipher.byteLength);
+                packet.set(iv, 0); packet.set(new Uint8Array(cipher), 12);
+                return packet;
             },
-            async decrypt(packed) {
-                const iv = packed.slice(0, 12);
-                const cipher = packed.slice(12);
-                return await crypto.subtle.decrypt({name:"AES-GCM", iv}, this.encKey, cipher);
+            async decrypt(packet) {
+                const iv = packet.slice(0, 12);
+                const cipher = packet.slice(12);
+                return await crypto.subtle.decrypt({name:"AES-GCM", iv}, this.key, cipher);
             }
         };
 
-        let peer, conn;
-        // --- V22 核心变量 ---
-        let incoming = null; // 接收状态对象
-        let sendingFile = null; // 发送文件引用
-        let isBusy = false;
-
-        // --- V22 新增：状态重置函数 ---
-        function resetTransferState() {
-            incoming = { chunks: [], meta: null, receivedCount: 0, totalChunks: 0 };
-            isBusy = false;
-            // 不清空 sendingFile，因为可能需要重传，直到下一轮开始才覆盖
-            updateBar(0, 0, 0, "准备中");
-        }
-
-        async function initApp() {
-            const code = document.getElementById('credentialInput').value.trim();
-            if(code.length !== 32) return alert("凭证需32位");
-            setStatus("🔐 连接中...");
-            setTimeout(async () => {
-                try {
-                    const roomId = await SecurityCore.init(code);
-                    connectPeer(roomId);
-                } catch(e) { setStatus("❌ 初始化失败"); }
-            }, 50);
-        }
-
-        function connectPeer(roomId) {
-            if(peer) peer.destroy();
-            peer = new Peer(roomId, {
-                host: '0.peerjs.com', port: 443, secure: true, path: '/',
-                config: { iceServers: [
-                    { urls: 'stun:stun.miwifi.com' }, { urls: 'stun:stun.chat.bilibili.com' }, { urls: 'stun:stun.qq.com' }
-                ]}
-            });
-            peer.on('open', () => { setStatus("✅ 就绪"); peer.on('connection', setupConn); });
-            peer.on('error', e => {
-                if(e.type === 'unavailable-id') {
-                    setStatus("🔗 连接房主...");
-                    const guest = new Peer({ host: '0.peerjs.com', port: 443, secure: true, path: '/', config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }] } });
-                    guest.on('open', () => setupConn(guest.connect(roomId)));
-                } else setStatus("❌ " + e.type);
-            });
-        }
-
-        function setupConn(c) {
-            conn = c;
-            conn.on('open', () => { setStatus("🤝 连接成功"); document.getElementById('panel').style.display = 'block'; });
-            conn.on('data', handleData);
-            conn.on('close', () => setStatus("🔌 断开"));
-        }
-
-        // --- 发送逻辑 ---
-        document.getElementById('fileInput').addEventListener('change', async e => {
-            const file = e.target.files[0];
-            if(!file || !conn) return;
+        // --- 状态管理 (包含流式句柄) ---
+        const State = {
+            peer: null, conn: null,
+            isBusy: false,
+            ackTimer: null,
+            retryCount: 0,
             
-            // 🔥 V22 修复：开始新任务前，强制重置状态
-            if(isBusy) {
-                if(!confirm("当前正在传输，确定要中断并开始新文件吗？")) return;
+            // 接收相关
+            fileHandle: null,     // 硬盘文件句柄 (Stream Mode)
+            writableStream: null, // 写入流 (Stream Mode)
+            useStreamMode: false, // 标记当前模式
+            
+            incoming: { chunks: [], meta: null, received: 0, total: 0 },
+            sendingFile: null,
+
+            reset() {
+                this.isBusy = false;
+                this.retryCount = 0;
+                this.incoming = { chunks: [], meta: null, received: 0, total: 0 };
+                this.fileHandle = null;
+                this.writableStream = null;
+                this.useStreamMode = false;
+                if(this.ackTimer) clearTimeout(this.ackTimer);
+                setTimeout(() => { if(!this.isBusy) UI.resetProgress(); }, 1000);
             }
-            resetTransferState();
-            isBusy = true;
-            sendingFile = file; 
-            
-            document.getElementById('prog-box').style.display = 'block';
-            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-            
-            // 发送新文件的元数据
-            conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type, total: totalChunks });
-            
-            sendChunksRange(0, totalChunks - 1, totalChunks);
-        });
+        };
 
-        async function sendChunksRange(start, end, total, specificList = null) {
-            const file = sendingFile;
-            let list = specificList;
-            if(!list) { list = []; for(let i=start; i<=end; i++) list.push(i); }
+        // --- 主逻辑 ---
+        const App = {
+            async init() {
+                const pwd = document.getElementById('credentialInput').value.trim();
+                if(pwd.length !== 32) return UI.toast("❌ 需32位密钥", "error");
+                UI.toast("🔐 初始化...", "normal");
+                try {
+                    const id = await Security.init(pwd);
+                    this.startPeer(id);
+                } catch(e) { UI.toast("❌ 密钥错误", "error"); }
+            },
 
-            const reader = new FileReader();
-            let idx = 0;
+            startPeer(id) {
+                if(State.peer) State.peer.destroy();
+                State.peer = new Peer(id, {
+                    host: '0.peerjs.com', port: 443, secure: true,
+                    config: { iceServers: [{ urls: 'stun:stun.miwifi.com' }, { urls: 'stun:stun.l.google.com:19302' }] }
+                });
+                State.peer.on('open', () => { 
+                    UI.toast("✅ 就绪 (Host)", "success"); 
+                    State.peer.on('connection', c => this.bindConn(c));
+                });
+                State.peer.on('error', e => {
+                    if(e.type === 'unavailable-id') {
+                        UI.toast("🔗 连接 Host...", "normal");
+                        const guest = new Peer({ config: State.peer.options.config });
+                        guest.on('open', () => this.bindConn(guest.connect(id)));
+                    } else UI.toast(`❌ ${e.type}`, "error");
+                });
+            },
 
-            const sendNext = async () => {
-                if(idx >= list.length) {
-                    if(!specificList) {
-                        conn.send({ type: 'end' }); 
-                        setStatus("⏳ 等待确认...");
-                    } else {
-                        conn.send({ type: 'retry-end' }); 
-                        setStatus("🔄 补发完毕");
+            bindConn(c) {
+                State.conn = c;
+                c.on('open', () => { 
+                    UI.toast("🤝 连接成功", "success");
+                    document.getElementById('transfer-panel').style.display = 'block';
+                });
+                c.on('data', d => this.handleData(d));
+                c.on('close', () => { UI.toast("🔌 断开", "error"); State.reset(); });
+            },
+
+            // --- 发送 ---
+            async sendFile(file) {
+                if(State.isBusy && !confirm("中断当前传输？")) return;
+                State.reset();
+                State.isBusy = true;
+                State.sendingFile = file;
+
+                const total = Math.ceil(file.size / CONSTANTS.CHUNK_SIZE);
+                State.conn.send({ type: 'meta', name: file.name, size: file.size, mime: file.type, total: total });
+                this.streamChunks(0, total - 1, total);
+            },
+
+            streamChunks(start, end, total, specificList = null) {
+                const file = State.sendingFile;
+                let queue = specificList || Array.from({length: end-start+1}, (_, i) => start + i);
+                const reader = new FileReader();
+                let idx = 0;
+
+                const next = async () => {
+                    if(!State.isBusy) return;
+                    if(idx >= queue.length) {
+                        if(!specificList) {
+                            State.conn.send({ type: 'end' });
+                            UI.updateProgress(100, "⏳ 等待对方保存...");
+                            State.ackTimer = setTimeout(() => { if(State.isBusy) { UI.toast("⚠️ 响应超时", "warning"); State.reset(); } }, CONSTANTS.ACK_TIMEOUT);
+                        } else {
+                            for(let k=0; k<3; k++) State.conn.send({ type: 'retry-end' }); // 结束信号连发3次
+                            UI.updateProgress(100, "🔄 补发完毕");
+                        }
+                        return;
                     }
+
+                    const seq = queue[idx];
+                    const offset = seq * CONSTANTS.CHUNK_SIZE;
+                    const slice = file.slice(offset, offset + CONSTANTS.CHUNK_SIZE);
+
+                    reader.onload = async (e) => {
+                        if(State.conn && State.conn.open) {
+                            const enc = await Security.encrypt(e.target.result);
+                            // 🔥 补发模式下，单包连发3次 (Aggressive Retry)
+                            const burst = specificList ? 3 : 1;
+                            for(let k=0; k<burst; k++) State.conn.send({ type: 'chunk', seq, payload: enc });
+                            
+                            idx++;
+                            if(!specificList) UI.updateProgress((seq/total)*100, "📤 发送中...");
+                            setTimeout(next, 0);
+                        }
+                    };
+                    reader.readAsArrayBuffer(slice);
+                };
+                next();
+            },
+
+            // --- 接收 ---
+            async handleData(data) {
+                if(data.type === 'transfer-complete') {
+                    if(State.ackTimer) clearTimeout(State.ackTimer);
+                    UI.toast("✅ 对方已保存", "success");
+                    State.reset();
                     return;
                 }
-                // 如果用户中途换了文件，停止旧任务
-                if(file !== sendingFile) return;
 
-                const seq = list[idx];
-                const offset = seq * CHUNK_SIZE;
-                const slice = file.slice(offset, offset + CHUNK_SIZE);
-                
-                reader.onload = async (evt) => {
-                    if(!conn || !conn.open) return;
-                    const encrypted = await SecurityCore.encrypt(evt.target.result);
-                    conn.send({ type: 'chunk', seq: seq, payload: encrypted });
-                    idx++;
-                    if(!specificList) {
-                        const percent = Math.min(100, Math.round((seq / total) * 100));
-                        updateBar(percent, seq * CHUNK_SIZE, file.size, "发送中");
+                if(data.type === 'meta') {
+                    State.reset();
+                    State.isBusy = true;
+                    State.incoming.meta = data;
+                    State.incoming.total = data.total;
+                    State.incoming.chunks = new Array(data.total); // 在流模式下，这只是个占位符/BitMap
+                    
+                    // 🔥 核心分支：尝试开启硬盘流式写入
+                    if ('showSaveFilePicker' in window) {
+                        try {
+                            State.fileHandle = await window.showSaveFilePicker({ suggestedName: data.name });
+                            State.writableStream = await State.fileHandle.createWritable();
+                            State.useStreamMode = true;
+                            UI.toast("💾 硬盘直写模式已激活", "disk");
+                        } catch(e) {
+                            console.log("用户取消或不支持，回退内存模式");
+                            State.useStreamMode = false;
+                        }
                     }
-                    setTimeout(sendNext, 0); 
-                };
-                reader.readAsArrayBuffer(slice);
-            };
-            sendNext();
-        }
+                    
+                    if(!State.useStreamMode) UI.toast("⬇ 内存模式接收中...", "normal");
+                    UI.updateProgress(0, `⬇ ${data.name}`);
+                    return;
+                }
 
-        // --- 接收逻辑 ---
-        async function handleData(data) {
-            // 🔥 V22 修复：收到 meta 信号，意味着新文件来了，强制重置接收状态
-            if (data.type === 'meta') {
-                resetTransferState(); // 清空之前的缓存
-                isBusy = true;
-                
-                incoming = { 
-                    chunks: new Array(data.total), 
-                    meta: data, 
-                    receivedCount: 0, 
-                    totalChunks: data.total 
-                };
-                
+                if(data.type === 'chunk' && State.isBusy) {
+                    try {
+                        // 只有当这个包还没收录时才处理
+                        if(!State.incoming.chunks[data.seq]) {
+                            const decrypted = await Security.decrypt(data.payload);
+                            
+                            if (State.useStreamMode && State.writableStream) {
+                                // 🌟 流式模式：写硬盘，不存内存
+                                await State.writableStream.write({
+                                    type: 'write',
+                                    position: data.seq * CONSTANTS.CHUNK_SIZE,
+                                    data: decrypted
+                                });
+                                State.incoming.chunks[data.seq] = true; // 标记收到，但不存数据
+                            } else {
+                                // 🧊 内存模式：存入数组
+                                State.incoming.chunks[data.seq] = decrypted;
+                            }
+
+                            State.incoming.received++;
+                            if(State.incoming.received % 10 === 0 || State.incoming.received === State.incoming.total) {
+                                UI.updateProgress((State.incoming.received/State.incoming.total)*100, "⬇ 接收中...");
+                            }
+                        }
+                    } catch(e) {}
+                    return;
+                }
+
+                if((data.type === 'end' || data.type === 'retry-end') && State.isBusy) {
+                    this.verifyAndFinish();
+                    return;
+                }
+
+                if(data.type === 'retry-req') {
+                    UI.toast(`⚠️ 补发 ${data.list.length} 个块`, "warning");
+                    this.streamChunks(0,0,0, data.list);
+                }
+            },
+
+            verifyAndFinish() {
+                const missing = [];
+                for(let i=0; i<State.incoming.total; i++) {
+                    if(!State.incoming.chunks[i]) missing.push(i); // 检查是否为 undefined
+                }
+
+                if(missing.length > 0) {
+                    State.retryCount++;
+                    if(State.retryCount > 5) {
+                        UI.toast("❌ 丢包过多，强制结束", "error");
+                        this.finalizeFile(); // 强制保存
+                        return;
+                    }
+                    UI.updateProgress(99, `⚠️ 第${State.retryCount}次补包 (${missing.length})`);
+                    State.conn.send({ type: 'retry-req', list: missing });
+                } else {
+                    this.finalizeFile();
+                }
+            },
+
+            async finalizeFile() {
+                const meta = State.incoming.meta;
+                let url = null;
+
+                // 🌟 流式模式收尾：关闭流
+                if (State.useStreamMode && State.writableStream) {
+                    try {
+                        await State.writableStream.close();
+                        UI.toast("✅ 文件已写入硬盘", "success");
+                        // 流式模式下无法直接获取 Blob URL (因为没存内存)，所以这里不生成预览链接
+                        // 但我们可以生成一个假的“已保存”记录
+                    } catch(e) { UI.toast("文件关闭失败", "error"); }
+                } 
+                // 🧊 内存模式收尾：生成 Blob
+                else {
+                    let mime = meta.mime || 'application/octet-stream';
+                    const cleanChunks = State.incoming.chunks.filter(c => c !== undefined);
+                    const blob = new Blob(cleanChunks, { type: mime });
+                    url = URL.createObjectURL(blob);
+                    UI.toast("✅ 文件接收完成", "success");
+                }
+
+                UI.addHistory(meta.name, meta.size, url, meta.mime);
+
+                if(State.conn) State.conn.send({ type: 'transfer-complete' });
+                State.reset();
+            }
+        };
+
+        // --- UI ---
+        const UI = {
+            toast(msg, type="normal") {
+                const el = document.getElementById('status-pill');
+                el.innerText = msg;
+                el.className = type === 'success' ? 'status-success' : type === 'error' ? 'status-error' : type === 'disk' ? 'status-disk' : '';
+                if(type!=='normal') setTimeout(()=>el.className='', 4000);
+            },
+            updateProgress(p, txt) {
                 document.getElementById('prog-box').style.display = 'block';
-                setStatus(`⬇ 接收: ${data.name}`);
-                return;
+                document.getElementById('p-fill').style.width = p + '%';
+                document.getElementById('p-status').innerText = txt;
+            },
+            resetProgress() {
+                document.getElementById('p-fill').style.width = '0%';
+                document.getElementById('p-status').innerText = '就绪';
+            },
+            addHistory(name, size, url, mime) {
+                const box = document.getElementById('history');
+                const sizeStr = size > 1024*1024 ? (size/1024/1024).toFixed(1)+' MB' : (size/1024).toFixed(1)+' KB';
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <div style="font-size:1.5rem">📄</div>
+                    <div class="file-info">
+                        <div style="font-weight:500">${name}</div>
+                        <div style="color:#86868b;font-size:0.8rem">${sizeStr}</div>
+                    </div>
+                    ${url ? `<a href="${url}" download="${name}" class="btn-save">保存</a>` : '<span style="color:#007aff;font-size:0.8rem">✅ 已存硬盘</span>'}
+                `;
+                box.prepend(div);
             }
+        };
 
-            if (data.type === 'chunk' && isBusy) {
-                try {
-                    if(!incoming.chunks[data.seq]) {
-                        const decrypted = await SecurityCore.decrypt(data.payload);
-                        incoming.chunks[data.seq] = decrypted;
-                        incoming.receivedCount++;
-                        
-                        // 进度计算优化
-                        const percent = Math.min(100, Math.round((incoming.receivedCount / incoming.totalChunks) * 100));
-                        // 估算已接收大小
-                        const currBytes = incoming.receivedCount * CHUNK_SIZE; 
-                        updateBar(percent, Math.min(currBytes, incoming.meta.size), incoming.meta.size, "接收中");
-                    }
-                } catch(e) {}
-                return;
-            }
+        // 辅助逻辑
+        App.genKey = () => document.getElementById('credentialInput').value = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');
+        App.showQR = () => { const v=document.getElementById('credentialInput').value; if(v.length!=32)return UI.toast("需32位密钥","error"); document.getElementById('qr-modal').style.display='flex'; document.getElementById('qrcode-gen').innerHTML=''; new QRCode(document.getElementById('qrcode-gen'),{text:location.href.split('#')[0]+'#c='+v}); };
+        App.scanQR = () => { document.getElementById('scan-modal').style.display='flex'; const s=new Html5Qrcode("reader"); s.start({facingMode:"environment"},{fps:10,qrbox:250},t=>{ if(t.includes('c='))t=t.split('c=')[1]; if(t.length===32){ document.getElementById('credentialInput').value=t; App.stopScan(); setTimeout(()=>App.init(),500); } }); App.stopScan=()=>s.stop().then(()=>document.getElementById('scan-modal').style.display='none').catch(()=>{}); };
 
-            if ((data.type === 'end' || data.type === 'retry-end') && isBusy) {
-                checkIntegrityAndRetry();
-                return;
-            }
-
-            if (data.type === 'retry-req') {
-                setStatus(`⚠️ 补发 ${data.list.length} 个分片...`);
-                sendChunksRange(0, 0, 0, data.list);
-            }
-        }
-
-        function checkIntegrityAndRetry() {
-            let missingList = [];
-            for(let i=0; i<incoming.totalChunks; i++) {
-                if(!incoming.chunks[i]) missingList.push(i);
-            }
-
-            if(missingList.length > 0) {
-                setStatus(`⚠️ 丢包 ${missingList.length} 个，请求补发...`);
-                conn.send({ type: 'retry-req', list: missingList });
-            } else {
-                finishReceive();
-            }
-        }
-
-        function finishReceive() {
-            let mime = incoming.meta.mime;
-            if(!mime || mime==='application/octet-stream') {
-                if(incoming.meta.name.match(/\.mp4$/i)) mime = 'video/mp4';
-                else if(incoming.meta.name.match(/\.(jpg|png|jpeg)$/i)) mime = 'image/jpeg';
-            }
-
-            const blob = new Blob(incoming.chunks, { type: mime });
-            const url = URL.createObjectURL(blob);
-            addHistory(incoming.meta.name, "⬇ 收到", formatSize(incoming.meta.size), url, mime);
-            
-            // 🔥 V22 修复：完成后重置状态，但保留 isBusy=false 以允许新传输
-            incoming.chunks = []; // 释放大内存
-            isBusy = false;
-            setStatus("✅ 接收完成");
-        }
-
-        // --- UI 工具 ---
-        function updateBar(p, curr, total, txt) {
-            document.getElementById('p-fill').style.width = p + '%';
-            document.getElementById('p-txt').innerText = `${txt} ${p}%`;
-            document.getElementById('p-detail').innerText = total ? `${formatSize(curr)}/${formatSize(total)}` : '';
-        }
-
-        function addHistory(name, type, size, url, mime) {
-            const div = document.getElementById('history');
-            if(div.innerText.includes('暂无')) div.innerHTML = '';
-            
-            let preview = '';
-            if (url) {
-                if (mime && mime.startsWith('video/')) preview = `<video src="${url}" controls class="media-preview" playsinline></video>`;
-                else if (mime && mime.startsWith('image/')) preview = `<img src="${url}" class="media-preview">`;
-            }
-
-            const color = type.includes('发送') ? '#5856d6' : '#34c759';
-            const html = `
-                <div class="log-item">
-                    <div style="font-weight:600; color:${color}; margin-bottom:4px;">${type} <span style="font-weight:normal;color:#8e8e93;font-size:0.8em">(${size})</span></div>
-                    <div style="word-break:break-all; font-family:monospace; font-size:0.9em; color:#333">${name}</div>
-                    ${url ? `<a href="${url}" download="${name}" class="btn-dl">💾 保存到本地</a>` : ''}
-                    ${preview}
-                </div>`;
-            div.innerHTML = html + div.innerHTML;
-        }
-
-        function genKey() {
-            const arr = new Uint8Array(16); crypto.getRandomValues(arr);
-            document.getElementById('credentialInput').value = Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
-        }
-        function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
-        function setStatus(s) { document.getElementById('status').innerText = s; }
-
-        let html5QrCode;
-        window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value = location.hash.split('c=')[1]; setTimeout(initApp, 500); history.replaceState(null, null, ' '); } };
-        function showQR() {
-            const c = document.getElementById('credentialInput').value;
-            if(c.length!=32) return alert("需32位凭证");
-            document.getElementById('qr-modal').style.display = 'flex';
-            document.getElementById('qrcode-gen').innerHTML = '';
-            new QRCode(document.getElementById('qrcode-gen'), { text: location.href.split('#')[0]+'#c='+c, width: 220, height: 220 });
-        }
-        function scanQR() {
-            document.getElementById('scan-modal').style.display = 'flex';
-            html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
-                (decodedText) => { stopScan(); const code = decodedText.includes('c=') ? decodedText.split('c=')[1] : decodedText; if(code.length===32) { document.getElementById('credentialInput').value = code; setTimeout(initApp, 500); } }
-            ).catch(() => { alert("无法启动摄像头(需HTTPS)"); stopScan(); });
-        }
-        function stopScan() { if(html5QrCode) html5QrCode.stop().then(() => { html5QrCode.clear(); document.getElementById('scan-modal').style.display = 'none'; }).catch(()=>{}); else document.getElementById('scan-modal').style.display = 'none'; }
+        window.onload = () => { if(location.hash.includes('c=')) { document.getElementById('credentialInput').value=location.hash.split('c=')[1]; history.replaceState(null,null,' '); setTimeout(()=>App.init(),600); } };
     </script>
 </body>
 </html>
-
-
-
