@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>局域网互传 V31 [降速稳压]</title>
+    <title>局域网互传 V32 [同步确认版]</title>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
@@ -22,6 +22,8 @@
         .grid-item.done { background: var(--success); }
         .grid-item.sending { background: var(--primary); }
         .grid-item.error { background: var(--error); }
+        /* 增加一个等待确认的黄色状态 */
+        .grid-item.waiting { background: #ffcc00; } 
 
         .drop-zone { border: 2px dashed #c7c7cc; padding: 20px; text-align: center; border-radius: 12px; margin-top: 15px; transition: 0.3s; opacity: 0.5; pointer-events: none; cursor: not-allowed; background: #fafafa; }
         .drop-zone.active { opacity: 1; pointer-events: all; border-color: var(--primary); background: #fff; cursor: pointer; }
@@ -33,8 +35,8 @@
 </head>
 <body>
     <div class="card">
-        <h3>V31 稳压版 <span style="font-size:0.75rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">Stable</span></h3>
-        <div style="color:#8e8e93; font-size:0.75rem; margin-bottom:12px">解决电脑传手机丢包 • 强制微小延时</div>
+        <h3>V32 步步为营 <span style="font-size:0.75rem;background:#000;color:#fff;padding:2px 6px;border-radius:4px;">ACK Sync</span></h3>
+        <div style="color:#8e8e93; font-size:0.75rem; margin-bottom:12px">发一段等一段 • 绝对防丢包 • 握手校验</div>
 
         <div class="input-group">
             <input type="text" id="credentialInput" placeholder="输入32位密钥" maxlength="32">
@@ -70,9 +72,8 @@
         const CONFIG = {
             CHUNK_SIZE: 16 * 1024, 
             TOTAL_PARTS: 100, 
-            SALT: "V31_THROTTLE_SALT",
-            // 🔥 核心修改：每包强制延时 (ms)。电脑传手机建议设为 2-5
-            THROTTLE_MS: 3 
+            SALT: "V32_ACK_SALT",
+            THROTTLE_MS: 3 // 保持微小延时，双重保险
         };
 
         const MultiCrypto = {
@@ -87,7 +88,7 @@
                     const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(i.toString()), iterations: 5000, hash: "SHA-256" }, keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
                     this.subKeys.push(key);
                 }
-                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_V31"));
+                const fingerprint = await crypto.subtle.digest('SHA-256', enc.encode(mainKey + "HANDSHAKE_V32"));
                 this.keyHash = Array.from(new Uint8Array(fingerprint)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 8);
                 const hash = await crypto.subtle.digest('SHA-256', enc.encode(mainKey));
                 return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0, 32);
@@ -108,6 +109,8 @@
 
         const App = {
             peer: null, conn: null, isVerified: false,
+            // 🔥 新增 ackResolver 用于暂停/恢复发送
+            ackResolver: null,
             state: { file: null, parts: [], meta: null, partCounts: new Array(CONFIG.TOTAL_PARTS).fill(0), hasError: false },
 
             async init() {
@@ -151,39 +154,51 @@
                     UI.setGrid(i, 'sending');
                     const start = i * partSize;
                     const end = Math.min(start + partSize, file.size);
-                    if(start >= file.size) { this.conn.send({ type: 'part-end', p: i, count: 0 }); UI.setGrid(i, 'done'); continue; }
+                    
+                    if(start >= file.size) { 
+                        // 空段也要等 ACK，保持同步
+                        this.conn.send({ type: 'part-end', p: i, count: 0 }); 
+                        await this.waitForAck(i);
+                        UI.setGrid(i, 'done'); 
+                        continue; 
+                    }
 
                     const partBlob = file.slice(start, end);
                     await this.sendPart(i, partBlob);
+                    
+                    // 🔥 核心改变：发完一段后，设置格子为黄色(Waiting)，并暂停等待接收方确认
+                    UI.setGrid(i, 'waiting');
+                    await this.waitForAck(i);
                     UI.setGrid(i, 'done');
                 }
                 this.conn.send({ type: 'all-done' });
                 UI.setProgress("✅ 发送完成");
             },
 
+            // 等待 ACK 的 Promise 锁
+            async waitForAck(partIndex) {
+                return new Promise(resolve => {
+                    this.ackResolver = resolve;
+                });
+            },
+
             async sendPart(p, blob) {
                 const buffer = await blob.arrayBuffer();
                 const totalChunks = Math.ceil(buffer.byteLength / CONFIG.CHUNK_SIZE);
-                
                 for(let j=0; j<totalChunks; j++) {
-                    // 1. 缓冲区检查 (背压)
-                    while (this.conn.dataChannel.bufferedAmount > 0) await new Promise(r => setTimeout(r, 1));
-                    
+                    while (this.conn.dataChannel.bufferedAmount > 0) await new Promise(r => setTimeout(r, 2));
                     const chunkOffset = j * CONFIG.CHUNK_SIZE;
                     const chunkData = buffer.slice(chunkOffset, chunkOffset + CONFIG.CHUNK_SIZE);
                     const encrypted = await MultiCrypto.encrypt(p, chunkData);
                     this.conn.send({ type: 'data', p: p, c: j, d: encrypted });
-
-                    // 🔥 2. 核心修改：强制微小延时 (Throttle)
-                    // 这给手机CPU留出解密时间，防止 buffer 溢出
-                    if(CONFIG.THROTTLE_MS > 0) {
-                        await new Promise(r => setTimeout(r, CONFIG.THROTTLE_MS));
-                    }
+                    // 依然保留微小延时，平滑网络波动
+                    if(CONFIG.THROTTLE_MS > 0) await new Promise(r => setTimeout(r, CONFIG.THROTTLE_MS));
                 }
                 this.conn.send({ type: 'part-end', p: p, count: totalChunks });
             },
 
             async handleData(data) {
+                // 1. 握手
                 if(data.type === 'handshake') {
                     if(data.hash === MultiCrypto.keyHash) {
                         this.isVerified = true;
@@ -196,6 +211,17 @@
                 }
                 if(!this.isVerified) return;
 
+                // 2. ACK 信号
+                if(data.type === 'ack') {
+                    // 如果发送方正在等锁，解开它
+                    if(this.ackResolver) {
+                        this.ackResolver(); 
+                        this.ackResolver = null;
+                    }
+                    return;
+                }
+
+                // 3. 接收逻辑
                 if(data.type === 'meta') {
                     this.state.meta = data;
                     this.state.parts = new Array(CONFIG.TOTAL_PARTS).fill(null).map(() => []);
@@ -220,7 +246,10 @@
                     const { p, count } = data;
                     if (this.state.partCounts[p] !== count) { UI.setGrid(p, 'error'); this.state.hasError = true; return; }
                     if(this.state.parts[p].length > 0) this.state.parts[p] = new Blob(this.state.parts[p]);
+                    
                     UI.setGrid(p, 'done');
+                    // 🔥 核心改变：接收端校验无误后，发送 ACK 信号
+                    this.conn.send({ type: 'ack', p: p });
                 }
                 if(data.type === 'all-done') {
                     if(!this.state.hasError) this.assembleFile();
